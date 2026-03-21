@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB Daily Digest</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2d;
+      --panel-2: #0f1526;
+      --border: #28324d;
+      --text: #eef2ff;
+      --muted: #aeb7d4;
+      --accent: #7db3ff;
+      --good: #93d7a4;
+      --warn: #ffd27d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #08101e, #0b1020 120px);
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .wrap {
+      width: min(1200px, calc(100vw - 24px));
+      margin: 0 auto;
+      padding: 18px 0 40px;
+    }
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(8,16,30,0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(125,179,255,0.12);
+      margin: -18px 0 18px;
+      padding: 14px 0 12px;
+    }
+    .toolbar-inner {
+      width: min(1200px, calc(100vw - 24px));
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 2px;
+      letter-spacing: 0.2px;
+    }
+    .sub {
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    input, button, select {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    .status {
+      color: var(--muted);
+      margin: 10px 0 18px;
+      font-size: 14px;
+    }
+    .game-card {
+      background: linear-gradient(180deg, rgba(19,26,45,0.96), rgba(15,21,38,0.98));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      margin: 0 0 18px;
+      box-shadow: 0 16px 30px rgba(0,0,0,0.18);
+    }
+    .game-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+    .matchup {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .meta, .chips {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: rgba(255,255,255,0.03);
+    }
+    .score {
+      text-align: right;
+      font-size: 26px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .summary {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      color: #f2f5ff;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 14px;
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.02);
+    }
+    .panel h3 {
+      margin: 0;
+      padding: 10px 12px;
+      font-size: 15px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 7px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      text-align: right;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    thead th {
+      color: var(--muted);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      background: #131a2d;
+      z-index: 1;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .leaders {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .leader-box {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.02);
+    }
+    .leader-box h4 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+    .leader-box ul { margin: 0; padding-left: 18px; }
+    .leader-box li { margin: 2px 0; font-size: 13px; }
+    .footer-note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .small { font-size: 12px; color: var(--muted); }
+    .loading {
+      padding: 18px;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+    a { color: var(--accent); }
+    @media (max-width: 900px) {
+      .grid, .leaders, .two-col { grid-template-columns: 1fr; }
+      .score { text-align: left; }
+      .game-header { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="toolbar-inner">
+      <strong>MLB Daily Digest</strong>
+      <input type="date" id="datePicker" />
+      <button id="todayBtn">Today</button>
+      <button id="yesterdayBtn">Yesterday</button>
+      <button id="loadBtn">Load games</button>
+      <label class="small"><input type="checkbox" id="hideLive" /> Hide live / scheduled games</label>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <h1>Single-page MLB summaries + box scores</h1>
+    <div class="sub">One scrollable page for the selected date. This page builds its own concise game summaries from MLB game data and then shows full hitting and pitching lines for both clubs.</div>
+    <div id="status" class="status">Ready.</div>
+    <div id="games"><div class="loading">Choose a date and load games.</div></div>
+    <div class="footer-note">Data source: MLB Stats API via client-side fetches. Open this file in any browser with internet access.</div>
+  </div>
+
+<script>
+const scheduleUrl = (date) => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=linescore,decisions,team`;
+const boxscoreUrl = (gamePk) => `https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`;
+const feedUrl = (gamePk) => `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+
+const fmtDate = (d) => d.toISOString().slice(0,10);
+const today = new Date();
+const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+document.getElementById('datePicker').value = fmtDate(today);
+
+document.getElementById('todayBtn').onclick = () => { document.getElementById('datePicker').value = fmtDate(today); loadGames(); };
+document.getElementById('yesterdayBtn').onclick = () => { document.getElementById('datePicker').value = fmtDate(yesterday); loadGames(); };
+document.getElementById('loadBtn').onclick = loadGames;
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function safe(v, fallback='—') { return (v === null || v === undefined || v === '') ? fallback : v; }
+function inningsFromLinescore(linescore) {
+  if (!linescore?.innings?.length) return { headers:'', rows:'' };
+  const headers = linescore.innings.map((_, i) => `<th>${i+1}</th>`).join('');
+  const away = linescore.innings.map(i => `<td>${safe(i.away?.runs, '')}</td>`).join('');
+  const home = linescore.innings.map(i => `<td>${safe(i.home?.runs, '')}</td>`).join('');
+  const rows = `
+    <tr><td>${linescore.teams.away.team.name}</td>${away}<td><strong>${linescore.teams.away.runs ?? ''}</strong></td><td>${linescore.teams.away.hits ?? ''}</td><td>${linescore.teams.away.errors ?? ''}</td></tr>
+    <tr><td>${linescore.teams.home.team.name}</td>${home}<td><strong>${linescore.teams.home.runs ?? ''}</strong></td><td>${linescore.teams.home.hits ?? ''}</td><td>${linescore.teams.home.errors ?? ''}</td></tr>`;
+  return { headers, rows };
+}
+
+function playerName(person) {
+  return person?.fullName || person?.full_name || 'Unknown';
+}
+
+function shortDecision(decisions) {
+  if (!decisions) return '';
+  const parts = [];
+  if (decisions.winner) parts.push(`W: ${playerName(decisions.winner)} (${decisions.winner.record ?? ''})`.trim());
+  if (decisions.loser) parts.push(`L: ${playerName(decisions.loser)} (${decisions.loser.record ?? ''})`.trim());
+  if (decisions.save) parts.push(`SV: ${playerName(decisions.save)} (${decisions.save.record ?? ''})`.trim());
+  return parts.join(' · ');
+}
+
+function topHitters(teamBlock, teamName) {
+  const players = Object.values(teamBlock?.players || {})
+    .map(p => ({
+      name: playerName(p.person),
+      pos: p.position?.abbreviation || '',
+      stats: p.stats?.batting || {},
+      note: p.gameStatus?.isCurrentBatter ? 'current batter' : ''
+    }))
+    .filter(p => (p.stats.atBats || 0) > 0);
+
+  players.sort((a,b) => {
+    const aVal = (b.stats.hits||0) - (a.stats.hits||0);
+    if (aVal !== 0) return aVal;
+    const rbiDiff = (b.stats.rbi||0) - (a.stats.rbi||0);
+    if (rbiDiff !== 0) return rbiDiff;
+    return (b.stats.homeRuns||0) - (a.stats.homeRuns||0);
+  });
+
+  return players.slice(0,3).map(p => `${p.name}: ${p.stats.hits||0}-for-${p.stats.atBats||0}${(p.stats.rbi||0) ? `, ${p.stats.rbi} RBI` : ''}${(p.stats.homeRuns||0) ? `, ${p.stats.homeRuns} HR` : ''}`).filter(Boolean);
+}
+
+function topPitchers(teamBlock) {
+  const players = Object.values(teamBlock?.players || {})
+    .map(p => ({ name: playerName(p.person), stats: p.stats?.pitching || {} }))
+    .filter(p => (p.stats.inningsPitched && p.stats.inningsPitched !== '0.0'));
+  players.sort((a,b) => {
+    const so = (Number(b.stats.strikeOuts)||0) - (Number(a.stats.strikeOuts)||0);
+    if (so !== 0) return so;
+    return (Number(parseFloat(b.stats.inningsPitched))||0) - (Number(parseFloat(a.stats.inningsPitched))||0);
+  });
+  return players.slice(0,2).map(p => `${p.name}: ${p.stats.inningsPitched||'0.0'} IP, ${p.stats.strikeOuts||0} K, ${p.stats.runs||0} R`);
+}
+
+function narrative(game, box, feed) {
+  const away = game.teams.away.team.name;
+  const home = game.teams.home.team.name;
+  const awayRuns = game.teams.away.score ?? game.linescore?.teams?.away?.runs ?? 0;
+  const homeRuns = game.teams.home.score ?? game.linescore?.teams?.home?.runs ?? 0;
+  const winner = awayRuns > homeRuns ? away : home;
+  const loser = awayRuns > homeRuns ? home : away;
+  const wRuns = Math.max(awayRuns, homeRuns);
+  const lRuns = Math.min(awayRuns, homeRuns);
+  const margin = Math.abs(awayRuns - homeRuns);
+  const scoring = feed?.liveData?.plays?.scoringPlays || [];
+  const allPlays = feed?.liveData?.plays?.allPlays || [];
+  const scoringDetails = scoring.map(i => allPlays[i]).filter(Boolean);
+  const lastScoring = scoringDetails.at(-1);
+  const lastText = lastScoring?.result?.description;
+  const dec = shortDecision(game.decisions);
+  const awayHitters = topHitters(box.teams.away, away);
+  const homeHitters = topHitters(box.teams.home, home);
+  const winSideHitters = winner === away ? awayHitters : homeHitters;
+  const winPitchers = winner === away ? topPitchers(box.teams.away) : topPitchers(box.teams.home);
+  let sentence1 = `${winner} beat ${loser}, ${wRuns}-${lRuns}`;
+  if (margin === 1) sentence1 += ` in a one-run game`;
+  else if (margin >= 5) sentence1 += ` in a comfortable win`;
+  sentence1 += `.`;
+  let sentence2 = winSideHitters.length ? `Top offensive lines: ${winSideHitters.join('; ')}.` : '';
+  let sentence3 = winPitchers.length ? `Pitching note: ${winPitchers.join('; ')}.` : '';
+  let sentence4 = lastText ? `Last scoring play: ${lastText}` : '';
+  if (dec) sentence4 += `${sentence4 ? ' ' : ''}${dec}.`;
+  return [sentence1, sentence2, sentence3, sentence4].filter(Boolean).join(' ');
+}
+
+function battingTable(teamBlock, label) {
+  const rows = Object.values(teamBlock?.players || {})
+    .map(p => ({
+      name: playerName(p.person),
+      pos: p.position?.abbreviation || '',
+      s: p.stats?.batting || {}
+    }))
+    .filter(p => (p.s.atBats || 0) > 0 || (p.s.baseOnBalls || 0) > 0 || (p.s.sacBunts || 0) > 0 || (p.s.sacFlies || 0) > 0)
+    .map(p => `<tr>
+      <td>${p.name} <span class="small">${p.pos}</span></td>
+      <td>${safe(p.s.atBats,0)}</td>
+      <td>${safe(p.s.runs,0)}</td>
+      <td>${safe(p.s.hits,0)}</td>
+      <td>${safe(p.s.rbi,0)}</td>
+      <td>${safe(p.s.baseOnBalls,0)}</td>
+      <td>${safe(p.s.strikeOuts,0)}</td>
+      <td>${safe(p.s.leftOnBase,0)}</td>
+      <td>${safe(p.s.avg,'.000')}</td>
+    </tr>`).join('');
+  return `
+    <div class="panel">
+      <h3>${label} batting</h3>
+      <table>
+        <thead><tr><th>Player</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>SO</th><th>LOB</th><th>AVG</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="9">No batting lines available.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+function pitchingTable(teamBlock, label) {
+  const rows = Object.values(teamBlock?.players || {})
+    .map(p => ({
+      name: playerName(p.person),
+      s: p.stats?.pitching || {}
+    }))
+    .filter(p => p.s.inningsPitched && p.s.inningsPitched !== '0.0')
+    .map(p => `<tr>
+      <td>${p.name}</td>
+      <td>${safe(p.s.inningsPitched,'0.0')}</td>
+      <td>${safe(p.s.hits,0)}</td>
+      <td>${safe(p.s.runs,0)}</td>
+      <td>${safe(p.s.earnedRuns,0)}</td>
+      <td>${safe(p.s.baseOnBalls,0)}</td>
+      <td>${safe(p.s.strikeOuts,0)}</td>
+      <td>${safe(p.s.homeRuns,0)}</td>
+      <td>${safe(p.s.era,'-')}</td>
+    </tr>`).join('');
+  return `
+    <div class="panel">
+      <h3>${label} pitching</h3>
+      <table>
+        <thead><tr><th>Pitcher</th><th>IP</th><th>H</th><th>R</th><th>ER</th><th>BB</th><th>SO</th><th>HR</th><th>ERA</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="9">No pitching lines available.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+function leadersHtml(box, away, home) {
+  const awayHit = topHitters(box.teams.away, away).map(s => `<li>${s}</li>`).join('') || '<li>No batting lines yet.</li>';
+  const homeHit = topHitters(box.teams.home, home).map(s => `<li>${s}</li>`).join('') || '<li>No batting lines yet.</li>';
+  const awayPit = topPitchers(box.teams.away).map(s => `<li>${s}</li>`).join('') || '<li>No pitching lines yet.</li>';
+  const homePit = topPitchers(box.teams.home).map(s => `<li>${s}</li>`).join('') || '<li>No pitching lines yet.</li>';
+  return `
+    <div class="leaders">
+      <div class="leader-box"><h4>${away} leaders</h4><ul>${awayHit}${awayPit}</ul></div>
+      <div class="leader-box"><h4>${home} leaders</h4><ul>${homeHit}${homePit}</ul></div>
+    </div>`;
+}
+
+async function loadGames() {
+  const date = document.getElementById('datePicker').value;
+  const hideLive = document.getElementById('hideLive').checked;
+  const gamesEl = document.getElementById('games');
+  gamesEl.innerHTML = '<div class="loading">Loading MLB schedule…</div>';
+  setStatus(`Fetching schedule for ${date}…`);
+
+  try {
+    const scheduleRes = await fetch(scheduleUrl(date));
+    const scheduleData = await scheduleRes.json();
+    let games = scheduleData?.dates?.[0]?.games || [];
+    if (hideLive) {
+      games = games.filter(g => ['Final', 'Game Over', 'Completed Early'].includes(g.status?.detailedState));
+    }
+    if (!games.length) {
+      gamesEl.innerHTML = '<div class="loading">No MLB games found for that date.</div>';
+      setStatus('No games found.');
+      return;
+    }
+
+    setStatus(`Found ${games.length} game${games.length === 1 ? '' : 's'}. Fetching box scores and play-by-play…`);
+
+    const cards = await Promise.all(games.map(async (game) => {
+      const gamePk = game.gamePk;
+      const [boxRes, feedRes] = await Promise.all([
+        fetch(boxscoreUrl(gamePk)),
+        fetch(feedUrl(gamePk))
+      ]);
+      const [box, feed] = await Promise.all([boxRes.json(), feedRes.json()]);
+
+      const away = game.teams.away.team.name;
+      const home = game.teams.home.team.name;
+      const status = game.status?.detailedState || game.status?.abstractGameState || 'Status unavailable';
+      const venue = game.venue?.name || 'Venue unavailable';
+      const gameTime = game.gameDate ? new Date(game.gameDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+      const awayScore = safe(game.teams.away.score, '-');
+      const homeScore = safe(game.teams.home.score, '-');
+      const innings = inningsFromLinescore(game.linescore);
+      const decisions = shortDecision(game.decisions);
+      const summaryText = narrative(game, box, feed);
+
+      return `
+        <article class="game-card">
+          <div class="game-header">
+            <div>
+              <div class="matchup">${away} at ${home}</div>
+              <div class="meta">${gameTime} · ${venue}</div>
+              <div class="chips">
+                <span class="chip">${status}</span>
+                ${game.linescore?.currentInningOrdinal ? `<span class="chip">${game.linescore.currentInningOrdinal} ${game.linescore.inningState || ''}</span>` : ''}
+                ${game.seriesDescription ? `<span class="chip">${game.seriesDescription}</span>` : ''}
+                ${decisions ? `<span class="chip">${decisions}</span>` : ''}
+              </div>
+            </div>
+            <div class="score">${awayScore}–${homeScore}</div>
+          </div>
+
+          <div class="summary">${summaryText}</div>
+
+          ${leadersHtml(box, away, home)}
+
+          <div class="grid">
+            <div class="panel">
+              <h3>Linescore</h3>
+              <table>
+                <thead><tr><th>Team</th>${innings.headers}<th>R</th><th>H</th><th>E</th></tr></thead>
+                <tbody>${innings.rows || '<tr><td colspan="20">No linescore available.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h3>Game notes</h3>
+              <div style="padding:12px; font-size:13px; color:#eef2ff;">
+                <div><strong>Winning pitcher:</strong> ${safe(game.decisions?.winner ? playerName(game.decisions.winner) : '')}</div>
+                <div><strong>Losing pitcher:</strong> ${safe(game.decisions?.loser ? playerName(game.decisions.loser) : '')}</div>
+                <div><strong>Save:</strong> ${safe(game.decisions?.save ? playerName(game.decisions.save) : '')}</div>
+                <div><strong>Weather / extra details:</strong> available in MLB Gameday if you want to extend this page later.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="two-col" style="margin-top:14px;"> 
+            ${battingTable(box.teams.away, away)}
+            ${battingTable(box.teams.home, home)}
+          </div>
+          <div class="two-col" style="margin-top:14px;"> 
+            ${pitchingTable(box.teams.away, away)}
+            ${pitchingTable(box.teams.home, home)}
+          </div>
+        </article>`;
+    }));
+
+    gamesEl.innerHTML = cards.join('');
+    setStatus(`Loaded ${games.length} game${games.length === 1 ? '' : 's'} for ${date}.`);
+  } catch (err) {
+    console.error(err);
+    gamesEl.innerHTML = `<div class="loading">Could not load data. If you opened this file inside an app preview, try opening it in Safari/Chrome instead. Error: ${String(err.message || err)}</div>`;
+    setStatus('Load failed.');
+  }
+}
+
+loadGames();
+</script>
+</body>
+</html>
