@@ -101,11 +101,14 @@ Rules:
   });
   if (!r.ok) {
     const err = await r.text();
-    console.error(`OpenAI error: ${r.status} ${err}`);
+    console.error(`  OpenAI error ${r.status}: ${err}`);
     return null;
   }
   const data = await r.json();
-  return data.choices?.[0]?.message?.content?.trim() || null;
+  const text = data.choices?.[0]?.message?.content?.trim() || null;
+  if (text) console.log(`    Summary generated (${text.length} chars)`);
+  else console.error('    OpenAI returned empty response');
+  return text;
 }
 
 // --- Build meta line ---
