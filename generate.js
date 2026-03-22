@@ -94,21 +94,31 @@ Rules:
     max_tokens: 300
   };
 
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify(body)
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const text = data.choices?.[0]?.message?.content?.trim() || null;
+      if (text) console.log(`    Summary generated (${text.length} chars)`);
+      else console.error('    OpenAI returned empty response');
+      return text;
+    }
     const err = await r.text();
+    if (r.status === 429) {
+      const wait = 25 * (attempt + 1);
+      console.log(`    Rate limited, waiting ${wait}s...`);
+      await new Promise(res => setTimeout(res, wait * 1000));
+      continue;
+    }
     console.error(`  OpenAI error ${r.status}: ${err}`);
     return null;
   }
-  const data = await r.json();
-  const text = data.choices?.[0]?.message?.content?.trim() || null;
-  if (text) console.log(`    Summary generated (${text.length} chars)`);
-  else console.error('    OpenAI returned empty response');
-  return text;
+  console.error('    Failed after 3 retries');
+  return null;
 }
 
 // --- Build meta line ---
@@ -236,6 +246,8 @@ async function main() {
       if (summary) {
         summaryHtml = summary.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
       }
+      // Pace requests to stay under rate limit
+      await new Promise(res => setTimeout(res, 22000));
     }
 
     const metaHtml = box ? buildMeta(decisions, box.teams.away, box.teams.home) : '';
