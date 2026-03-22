@@ -2,6 +2,46 @@
 
 A single, scrollable web page that recaps every MLB game on a given day. For each game: a scoreboard header, a narrative summary highlighting key plays and players, and a full box score. Think of it as a digital version of the newspaper sports page — dense, scannable, no clicking around.
 
+Live at: https://craigrow.github.io/MLB_Summaries/
+
+## Current Architecture
+
+**Build pipeline (Option B — implemented)** with plans for a hybrid approach.
+
+### How It Works Today
+
+1. A **GitHub Action** (`.github/workflows/build.yml`) runs daily at **1 AM PT** and **7 AM PT**, plus on manual trigger.
+2. `generate.js` (Node.js) runs in the Action:
+   - Fetches yesterday's completed games from the MLB Stats API.
+   - For each game, fetches the live feed (play-by-play, boxscore, decisions).
+   - Sorts games per ordering rules (Mariners first → AL West → AL → NL).
+   - Sends scoring plays + box score context to **OpenAI GPT-4o-mini** to generate narrative summaries.
+   - Renders a fully static `index.html` with all game cards.
+   - Commits and pushes to `main`, triggering GitHub Pages deployment.
+3. The **OpenAI API key** is stored as a GitHub Secret (`OPENAI_API_KEY`).
+
+### Rate Limiting
+
+The OpenAI account is on Tier 1 with a **3 requests per minute** limit for GPT-4o-mini. `generate.js` handles this with:
+- A **22-second delay** between LLM calls to stay under the RPM cap.
+- **Retry with backoff** (up to 3 attempts, 25s/50s/75s waits) on 429 responses.
+- Total generation time for a full 15-game slate: ~6 minutes.
+
+As usage history builds, OpenAI will auto-upgrade the tier and the delay can be reduced.
+
+### File Structure
+
+```
+/
+  index.html              ← generated static page (output of build pipeline)
+  generate.js             ← Node script: fetches MLB data, calls GPT-4o-mini, renders HTML
+  .github/
+    workflows/
+      build.yml           ← GitHub Action: scheduled + manual trigger
+  .nojekyll               ← prevents Jekyll processing on GitHub Pages
+  Specification.md        ← this file
+```
+
 ## Functional Requirements
 
 ### Per-Game Card
@@ -19,156 +59,81 @@ Each game is rendered as a card with these sections in order:
    - No redundancy with the box score.
    - Cap at 1–3 key hitters named per summary.
    - All facts must come from real game data (play-by-play, scoring plays, box score). No fabricated events.
+   - Use "the" before team names in prose (e.g., "the Mariners rallied").
 
 3. **Compact footer line** — one line:
    ```
-   W: Kirby • L: Eovaldi • Key hitters: Raleigh 2-4, HR, 2 RBI; Rodríguez 2-5, 2 R
+   W: Kirby • L: Eovaldi • Key hitters: Raleigh 2-for-4, HR, 2 RBI; Rodríguez 2-for-5, 2 R
    ```
-   - Winning pitcher name, losing pitcher name (no stats unless they add something).
-   - 1–3 key hitters with slash line highlights. Keep it editorial, not a second box score.
+   - Winning pitcher name, losing pitcher name.
+   - 1–3 key hitters with "X-for-Y" format (not "X-Y"). Keep it editorial, not a second box score.
 
 4. **Full box score** — collapsible (collapsed by default), containing:
    - **Batting**: both teams. Columns: Player, Pos, AB, R, H, RBI, BB, SO, AVG.
    - **Pitching**: both teams. Columns: Player, IP, H, R, ER, BB, SO, ERA.
-   - Innings pitched use baseball notation: `5` not `5.0`; `5 1/3` not `5.1`; `5 2/3` not `5.2`.
+   - Innings pitched use baseball fraction notation: `5`, `5 ⅓`, `5 ⅔` (Unicode fractions, not decimals).
 
 ### Game Ordering
 
-Games are sorted in this priority:
-1. Mariners games first (any game where SEA is home or away).
-2. Other AL West teams (HOU, LAA, TEX, ATH).
-3. Remaining AL teams (East, then Central).
-4. NL teams (West, East, Central).
+Games are sorted using this priority map:
 
-Within each group, order by game start time.
+```javascript
+const SORT_ORDER = {SEA:0,HOU:1,LAA:2,TEX:3,ATH:4,OAK:4,
+  BAL:10,BOS:11,NYY:12,TB:13,TOR:14,
+  CLE:20,CWS:21,DET:22,KC:23,MIN:24,
+  AZ:30,COL:31,LAD:32,SD:33,SF:34,
+  ATL:40,MIA:41,NYM:42,PHI:43,WSH:44,
+  CHC:50,CIN:51,MIL:52,PIT:53,STL:54};
+```
+
+Mariners first, then AL West, AL East, AL Central, NL West, NL East, NL Central.
 
 ### Date Selection
 
-- The page supports viewing **today** and **yesterday**.
-- Default on load: **yesterday** (the common morning-coffee use case).
-- Toggle buttons at the top: "Yesterday" / "Today".
-- Only completed (Final) games are shown. In-progress or scheduled games are hidden.
+- Default: **yesterday** (the morning-coffee use case).
+- Only completed (Final) games are shown.
 
 ### Page Header
 
-- Title: "MLB Yesterday" or "MLB Today" depending on selection.
-- Date displayed below the title.
-- No explanatory text, notes, or disclaimers.
-
-## Non-Functional Requirements
-
-1. **Hosting**: GitHub Pages (static site, zero hosting cost). Repo: https://github.com/craigrow/MLB_Summaries
-2. **Page load**: must render within a few seconds on a mobile device.
-3. **Cost**: minimize operational cost. The only acceptable recurring cost is LLM API calls for summary generation.
-4. **No copyrighted content**: summaries are original, generated from structured data. No scraped editorial recaps.
+- No explanatory text, notes, or disclaimers at the top.
+- Date displayed contextually.
 
 ## Data Source
 
 **MLB Stats API** (`statsapi.mlb.com`) — free, public, no auth required.
 
-Key endpoints:
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/v1/schedule?date=YYYY-MM-DD&sportId=1&hydrate=linescore,decisions` | Day's games with linescore and W/L/S decisions |
-| `GET /api/v1.1/game/{gamePk}/feed/live` | Full live feed: play-by-play (`liveData.plays.allPlays`), scoring plays (`liveData.plays.scoringPlays`), boxscore (`liveData.boxscore`), linescore (`liveData.linescore`), decisions (`liveData.decisions`) |
-| `GET /api/v1/game/{gamePk}/boxscore` | Standalone boxscore (alternative to live feed) |
-| `GET /api/v1/teams?sportId=1&season=YYYY` | Team metadata: abbreviation, teamName, division, league |
+| `GET /api/v1/schedule?date=YYYY-MM-DD&sportId=1&hydrate=team,linescore,decisions` | Day's games with linescore and W/L/S decisions |
+| `GET /api/v1.1/game/{gamePk}/feed/live` | Full live feed: play-by-play, scoring plays, boxscore, linescore, decisions |
 
 Key data shapes:
-- **Scoring play**: `allPlays[index].result.description` contains natural-language play description with player names, e.g. *"Mark Vientos homers (1) on a fly ball to left center field."*
+- **Scoring play**: `allPlays[index].result.description` — natural-language play description with player names.
 - **Decisions**: `liveData.decisions.winner.fullName`, `.loser.fullName`, `.save.fullName`
-- **Batting stats**: `boxscore.teams.{away|home}.players.ID{playerId}.stats.batting` → atBats, hits, runs, rbi, baseOnBalls, strikeOuts, avg
-- **Pitching stats**: `...stats.pitching` → inningsPitched, hits, runs, earnedRuns, baseOnBalls, strikeOuts, era
-- **Batting order**: `boxscore.teams.{away|home}.battingOrder` (array of player IDs)
-- **Pitchers**: `boxscore.teams.{away|home}.pitchers` (array of player IDs, in game order)
-- **Team name (no city)**: `team.teamName` (e.g. "Mets") or `team.clubName`
-- **Team abbreviation**: `team.abbreviation` (e.g. "NYM")
-- **Division**: `team.division.id` — AL West=200, AL East=201, AL Central=202, NL West=203, NL East=204, NL Central=205
-- **League**: `team.league.id` — AL=103, NL=104
+- **Batting stats**: `boxscore.teams.{away|home}.players.ID{playerId}.stats.batting`
+- **Pitching stats**: `...stats.pitching` → `inningsPitched` (string like "5.1")
+- **Team name (no city)**: `team.teamName` (e.g., "Mets")
+- **Team abbreviation**: `team.abbreviation` (e.g., "NYM")
+- **Team logos**: `https://a.espncdn.com/i/teamlogos/mlb/500/{fileCode}.png` (hotlinked from ESPN CDN)
 
-Team logos: `https://a.espncdn.com/i/teamlogos/mlb/500/{fileCode}.png` where fileCode = team.fileCode (e.g. "nym", "sea", "lad"). These are hotlinked from ESPN's CDN — functional but could break. Consider self-hosting copies as a future improvement.
-
-## Architecture
-
-### Option A: Client-Side Only (Current Prototype Direction)
-
-A single `index.html` with inline CSS and JS. On page load:
-1. Fetch schedule for selected date from MLB Stats API.
-2. Filter to completed games only.
-3. For each game, fetch the live feed to get scoring plays, boxscore, and decisions.
-4. Sort games per ordering rules.
-5. Render cards with scoreboard, summary, footer, and collapsible box score.
-
-**Summary generation**: This is the hard part. Client-side options:
-- **Algorithmic**: Parse scoring plays and build template-driven prose. Fast, free, but limited narrative quality. The prototype's current summaries are generic and don't mention players — this approach tends to produce that.
-- **Client-side LLM call**: Call an LLM API (OpenAI, Anthropic, Bedrock) from the browser with scoring plays + box score as context. Produces high-quality recaps but requires an API key exposed in client-side code (security concern) and costs money per page load.
-
-### Option B: Static Site with Build Pipeline (Recommended)
-
-A GitHub Action runs on a schedule (e.g., daily at 7 AM PT and 1 AM PT):
-1. Fetches yesterday's completed games from MLB Stats API.
-2. For each game, fetches live feed data.
-3. Sends scoring plays + box score context to an LLM to generate the narrative summary.
-4. Renders a static `index.html` with all game cards pre-built.
-5. Commits and pushes to the repo, triggering GitHub Pages deployment.
-
-**Advantages**:
-- API key stays in GitHub Secrets (secure).
-- LLM called once per game per day (cost-controlled).
-- Page loads instantly (no API calls at render time).
-- Works offline after initial load.
-
-**Disadvantages**:
-- "Today" view requires either a second build or a hybrid approach (static yesterday + client-side today).
-- Slight delay between games finishing and page updating.
-
-**Hybrid variant**: Static HTML for yesterday (pre-built), plus client-side JS for today's games that fetches live from MLB API (no LLM summaries for today — just scoreboard + box score, or use algorithmic summaries).
-
-### Decision Needed
-
-The owner should choose between:
-- **Pure client-side** (simpler, but summary quality limited or API key exposed)
-- **Build pipeline** (better summaries, secure, but more infrastructure)
-- **Hybrid** (best of both — recommended)
-
-## Visual Design
-
-Based on the prototype at `index.html` in this repo:
-
-- Light background (`#f3f4f6`), white cards with subtle shadow, rounded corners (16px).
-- System font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`).
-- Max width 860px, centered. Responsive: 2-column grid on desktop (≥760px), single column on mobile.
-- Scoreboard: bordered rounded box, "Final" label in muted gray header, R/H/E column headers, team rows with 30px logos.
-- Winner row: slightly bolder weight + subtle background tint.
-- Summary: ~1rem font, 1.55 line-height.
-- Meta footer: muted gray, separated by top border.
-- Box score (new): compact table, collapsed by default with a toggle control.
-
-## Innings Pitched Formatting
-
-Display innings pitched in baseball notation:
-| API value | Display |
-|---|---|
-| `5.0` | `5` |
-| `5.1` | `5 1/3` |
-| `5.2` | `5 2/3` |
-| `0.1` | `0 1/3` |
-| `0.2` | `0 2/3` |
+### Innings Pitched Formatting
 
 ```javascript
 function formatIP(ip) {
   const [whole, frac] = String(ip).split('.');
   const f = parseInt(frac || '0', 10);
   if (f === 0) return whole;
-  if (f === 1) return `${whole} 1/3`;
-  if (f === 2) return `${whole} 2/3`;
+  if (f === 1) return `${whole} ⅓`;
+  if (f === 2) return `${whole} ⅔`;
   return String(ip);
 }
 ```
 
-## Summary Generation Prompt (for LLM-based approach)
+## Summary Generation
 
-When sending game data to an LLM for summary generation, use this system prompt:
+### LLM Prompt
+
+System prompt sent to GPT-4o-mini:
 
 ```
 Write a short baseball game recap in natural newspaper-style English.
@@ -184,43 +149,65 @@ Rules:
 - All player names and events must come from the provided data. Do not invent any facts.
 ```
 
-The user message should include: scoring plays (with descriptions), decisions (W/L/S), key batting lines (top 2-3 hitters by hits+RBI), and the final score for context.
+The user message includes: scoring play descriptions, W/L/S decisions, key hitters (top performers by hits+RBI), and the final score.
 
-## File Structure
+### Key Hitters Selection
 
-Current:
-```
-/
-  index.html          ← prototype (static, hardcoded March 20 2026 spring training data)
-  index-old.html      ← earlier iterations
-  index-old2.html
-  index-old3.html
-  index-old4.html
-  Specification.md    ← this file
+`generate.js` scans **all players** on both teams (not just the batting order) to catch pinch-hit contributions. Selects top performers by hits + RBI.
+
+## Visual Design
+
+- Light background (`#f3f4f6`), white cards with subtle shadow, rounded corners (16px).
+- System font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`).
+- Max width 860px, centered. Responsive: 2-column grid on desktop (≥760px), single column on mobile.
+- Scoreboard: bordered rounded box, "Final" label in muted gray header, R/H/E column headers, team rows with 30px logos.
+- Winner row: bolder weight + subtle background tint.
+- Summary: ~1rem font, 1.55 line-height.
+- Meta footer: muted gray, separated by top border.
+- Box score: compact table, collapsed by default with a toggle control.
+
+## GitHub Infrastructure
+
+- **Repo**: https://github.com/craigrow/MLB_Summaries
+- **GitHub Pages**: deployed from `main` branch, site at https://craigrow.github.io/MLB_Summaries/
+- **Secret**: `OPENAI_API_KEY` — OpenAI platform API key (Tier 1 account)
+- **Workflow schedule**: cron `0 8,14 * * *` (8:00 and 14:00 UTC = 1 AM and 7 AM PT)
+- **`.nojekyll`**: present in repo root to prevent Jekyll processing
+
+## Known Issues & Next Steps
+
+### Must Do
+1. **Verify LLM summaries end-to-end** — the rate-limit retry + pacing logic was just added. The next workflow run should produce summaries for all games. Trigger manually and check the Actions log for `Summary generated` on every game.
+2. **Fallback for LLM failures** — if OpenAI returns an error after retries, `generate.js` currently outputs no summary for that game. Should fall back to algorithmic summaries (the logic exists in the client-side `index.html` prototype and could be ported).
+3. **Restore "today" view** — `generate.js` overwrites `index.html` with yesterday's static content, so there's no way to see today's games. Recommended approach: hybrid page with static yesterday section + client-side JS that fetches today's games from MLB API at runtime (with algorithmic summaries, no LLM needed).
+
+### Nice to Have
+4. **Reduce inter-request delay** — once OpenAI auto-upgrades the account tier (higher RPM), reduce or remove the 22-second delay between calls.
+5. **Self-host team logos** — currently hotlinked from ESPN CDN. Could break. Copy to repo for reliability.
+6. **Summary quality iteration** — review generated summaries and tune the prompt, temperature (currently 0.7), or max_tokens (currently 300) as needed.
+7. **Today/yesterday toggle UI** — add toggle buttons once the hybrid approach is implemented.
+
+## Development Notes
+
+### Running Locally
+
+```bash
+# Test generate.js locally (requires OPENAI_API_KEY env var)
+OPENAI_API_KEY=sk-... node generate.js
+
+# Output: writes index.html to current directory
 ```
 
-Target (build pipeline approach):
-```
-/
-  index.html          ← generated static page (output of build)
-  generate.js         ← Node script: fetches data, calls LLM, renders HTML
-  template.html       ← HTML/CSS template (or inline in generate.js)
-  .github/
-    workflows/
-      build.yml       ← GitHub Action: runs generate.js on schedule
-  Specification.md
-```
+### Triggering a Build
 
-Target (client-side approach):
-```
-/
-  index.html          ← single file with inline CSS + JS, fetches MLB API at runtime
-  Specification.md
-```
+Go to https://github.com/craigrow/MLB_Summaries/actions → "Generate MLB Digest" → "Run workflow" → select `main` branch → click "Run workflow".
 
-## Open Questions
+### Client-Side Prototype
 
-1. **LLM provider**: OpenAI, Anthropic Claude, or Amazon Bedrock? Affects cost and API setup.
-2. **"Today" view**: Should today show in-progress games with partial data, or only completed games?
-3. **Team logos**: Continue hotlinking ESPN CDN, or self-host copies for reliability?
-4. **Build schedule**: If using GitHub Actions, what times should it run? Suggestion: 1 AM PT (after West Coast games) and 7 AM PT (morning refresh).
+The original `index.html` (before being overwritten by `generate.js`) contained a fully functional client-side version with:
+- Runtime fetching from MLB Stats API
+- Algorithmic summary generation from scoring plays
+- Today/yesterday toggle
+- All the same scoreboard, box score, and meta footer rendering
+
+This code is preserved in git history and can be referenced for the hybrid approach or as a fallback engine.
