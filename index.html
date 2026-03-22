@@ -357,9 +357,7 @@ function buildMeta(decisions,boxAway,boxHome){
   const hitters=[];
   [boxAway,boxHome].forEach(side=>{
     const players=side.players||{};
-    (side.battingOrder||[]).forEach(id=>{
-      const p=players['ID'+id];
-      if(!p)return;
+    Object.values(players).forEach(p=>{
       const s=p.stats?.batting;
       if(!s||!s.atBats)return;
       const val=(s.hits||0)+(s.rbi||0)+(s.homeRuns||0)*2;
@@ -370,7 +368,7 @@ function buildMeta(decisions,boxAway,boxHome){
   const topH=hitters.slice(0,3);
   if(topH.length){
     const strs=topH.map(h=>{
-      let s=`${h.name} ${h.h}-${h.ab}`;
+      let s=`${h.name} ${h.h}-for-${h.ab}`;
       if(h.hr)s+=`, ${h.hr} HR`;
       if(h.rbi)s+=`, ${h.rbi} RBI`;
       return s;
