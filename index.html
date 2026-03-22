@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MLB Daily Digest</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--line:#d1d5db;--muted:#6b7280;--text:#111827}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.page{max-width:860px;margin:0 auto;padding:20px 14px 40px}
+header{margin:4px 4px 18px}
+h1{font-size:1.9rem;line-height:1.1;margin:0 0 4px}
+.subtitle{color:var(--muted);font-size:.98rem;margin-bottom:10px}
+.date-btns{display:flex;gap:8px;margin-bottom:6px}
+.date-btns button{padding:7px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.92rem;font-weight:600;cursor:pointer}
+.date-btns button.active{background:var(--text);color:#fff;border-color:var(--text)}
+.grid{display:grid;gap:18px}
+.game-card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.scoreboard{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.sb-top{background:#f8fafc;color:var(--muted);font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;padding:8px 14px;border-bottom:1px solid #e5e7eb}
+.sb-head,.sb-row{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px 44px;align-items:center}
+.sb-head{color:var(--muted);font-size:.78rem;font-weight:800;padding:6px 14px;border-bottom:1px solid #e5e7eb}
+.sb-head>div{text-align:center}.sb-head>div:first-child{text-align:left}
+.sb-row{padding:10px 14px;border-bottom:1px solid #e5e7eb}
+.sb-row:last-child{border-bottom:0}
+.sb-row.winner{background:#f9fafb}
+.sb-row.winner .team-name,.sb-row.winner .stat{font-weight:800}
+.team{display:flex;align-items:center;gap:10px;min-width:0}
+.team-logo{width:28px;height:28px;object-fit:contain;flex:0 0 auto}
+.team-name{font-size:1rem;font-weight:600}
+.stat{text-align:center;font-size:1rem;font-weight:700}
+.summary{margin-bottom:12px}
+.summary p{margin:0 0 10px;font-size:1.02rem;line-height:1.55}
+.summary p:last-child{margin-bottom:0}
+.meta{padding-top:10px;border-top:1px solid #e5e7eb;color:var(--muted);font-size:.92rem;margin-bottom:10px}
+.box-toggle{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:.85rem;font-weight:600;color:var(--muted);cursor:pointer;width:100%}
+.box-toggle:hover{background:#f9fafb}
+.box-content{display:none;margin-top:12px;overflow-x:auto}
+.box-content.open{display:block}
+.box-content h4{font-size:.85rem;font-weight:700;margin:12px 0 4px;color:var(--muted)}
+.box-content h4:first-child{margin-top:0}
+.box-content table{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:8px}
+.box-content th,.box-content td{padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;white-space:nowrap}
+.box-content th:first-child,.box-content td:first-child{text-align:left}
+.box-content th{font-weight:700;color:var(--muted);font-size:.75rem}
+.box-content .totals td{font-weight:700;border-top:2px solid var(--line)}
+.loading{text-align:center;padding:60px 20px;color:var(--muted);font-size:1.1rem}
+.no-games{text-align:center;padding:40px 20px;color:var(--muted);font-size:1rem}
+@media(min-width:760px){.grid{grid-template-columns:1fr 1fr}.game-card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1 id="title">MLB Daily Digest</h1>
+    <div class="subtitle" id="dateLabel"></div>
+    <div class="date-btns">
+      <button id="btnYesterday" onclick="loadDate('yesterday')">Yesterday</button>
+      <button id="btnToday" onclick="loadDate('today')">Today</button>
+    </div>
+  </header>
+  <section class="grid" id="games">
+    <div class="loading">Loading games…</div>
+  </section>
+</main>
+<script>
+const API='https://statsapi.mlb.com';
+const SORT_ORDER={SEA:0,HOU:1,LAA:2,TEX:3,ATH:4,OAK:4,
+  BAL:10,BOS:11,NYY:12,TB:13,TOR:14,
+  CLE:20,CWS:21,DET:22,KC:23,MIN:24,
+  AZ:30,COL:31,LAD:32,SD:33,SF:34,
+  ATL:40,MIA:41,NYM:42,PHI:43,WSH:44,
+  CHC:50,CIN:51,MIL:52,PIT:53,STL:54};
+
+function dateStr(d){return d.toISOString().slice(0,10)}
+function fmtDate(s){const d=new Date(s+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+
+function getDate(which){
+  const now=new Date();
+  if(which==='yesterday'){now.setDate(now.getDate()-1)}
+  return dateStr(now);
+}
+
+function formatIP(ip){
+  const s=String(ip);
+  const[w,f]=s.split('.');
+  const frac=parseInt(f||'0',10);
+  if(frac===0)return w;
+  if(frac===1)return w+' \u2153';
+  if(frac===2)return w+' \u2154';
+  return s;
+}
+
+function sortKey(game){
+  const at=game.teams.away.team.abbreviation;
+  const ht=game.teams.home.team.abbreviation;
+  const sa=SORT_ORDER[at]??99;
+  const sh=SORT_ORDER[ht]??99;
+  return Math.min(sa,sh);
+}
+
+function buildSummary(scoringPlays,allPlays,decisions,awayName,homeName,awayR,homeR){
+  if(!scoringPlays||!scoringPlays.length)return'<p>A scoreless game with neither side able to break through.</p>';
+  const plays=scoringPlays.map(i=>allPlays[i]).filter(Boolean);
+  const winner=homeR>awayR?homeName:(awayR>homeR?awayName:null);
+  const loser=homeR>awayR?awayName:(awayR>homeR?homeName:null);
+  const the=(t,cap)=>(cap?'The ':'the ')+t;
+  const ordinal=n=>{const s=['th','st','nd','rd'];const v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])};
+
+  // Extract batter name from start of API description
+  function batter(desc){
+    if(!desc)return'';
+    const m=desc.match(/^([A-Z][A-Za-zÀ-ÿ'-]+(?:\s+[A-Z][A-Za-zÀ-ÿ'-]+)+)/);
+    return m?m[1]:'';
+  }
+
+  // Extract runners who scored from description ("X scores. Y scores.")
+  function scorers(desc){
+    if(!desc)return[];
+    const m=desc.match(/([A-Z][A-Za-zÀ-ÿ'-]+(?:\s+(?:[A-Z][A-Za-zÀ-ÿ'-]+|Jr\.|Sr\.|II|III|IV))+)\s+scores/g);
+    return m?m.map(s=>s.replace(/\s+scores$/,'')):[];
+  }
+
+  // Build a natural sentence from an API scoring play description
+  function narratePlay(p){
+    const r=p.result;
+    const desc=r.description||'';
+    const name=batter(desc);
+    const ev=(r.event||'').toLowerCase();
+    const rbi=r.rbi||0;
+    const scored=scorers(desc);
+
+    // Non-batter-driven (wild pitch, passed ball during strikeout, etc.)
+    if(rbi===0&&(ev.includes('strikeout')||ev.includes('flyout')||ev.includes('lineout')||ev.includes('pop out'))){
+      const d=desc.toLowerCase();
+      const how=d.includes('wild pitch')?'a wild pitch':d.includes('passed ball')?'a passed ball':
+                d.includes('error')?'an error':d.includes('balk')?'a balk':null;
+      // Check runners array for who scored and how
+      const runners=(p.runners||[]).filter(r=>r.details?.isScoringEvent);
+      const scorerName=runners[0]?.details?.runner?.fullName;
+      const runEvent=runners[0]?.details?.event||'';
+      const runHow=runEvent.includes('Wild Pitch')?'a wild pitch':
+                   runEvent.includes('Passed Ball')?'a passed ball':
+                   runEvent.includes('Error')||runEvent.includes('Pickoff Error')?'an error':
+                   runEvent.includes('Balk')?'a balk':
+                   runEvent.includes('Stolen')?'a steal of home':
+                   how||'a play';
+      if(scorerName)return`${scorerName} scored on ${runHow}`;
+      if(scored.length)return`${scored[0]} scored on ${runHow}`;
+      return`a run scored on ${runHow}`;
+    }
+
+    if(!name)return desc.split('.')[0];
+
+    // Home run
+    if(ev.includes('home run')||ev.includes('grand slam')){
+      const isGrand=ev.includes('grand slam')||rbi>=4;
+      if(isGrand)return`${name} hit a grand slam, scoring ${scored.join(', ')||'three others'}`;
+      if(rbi>1&&scored.length)return`${name} homered, also scoring ${scored.join(' and ')}`;
+      if(rbi>1)return`${name} hit a ${rbi}-run homer`;
+      return`${name} homered`;
+    }
+    // Double
+    if(ev.includes('double')&&!ev.includes('double play')){
+      if(scored.length)return`${name} doubled, scoring ${scored.join(' and ')}`;
+      return`${name} doubled`;
+    }
+    // Triple
+    if(ev.includes('triple')){
+      if(scored.length)return`${name} tripled, scoring ${scored.join(' and ')}`;
+      return`${name} tripled`;
+    }
+    // Single
+    if(ev.includes('single')){
+      if(scored.length)return`${name} singled, scoring ${scored.join(' and ')}`;
+      return`${name} singled`;
+    }
+    // Sac fly
+    if(ev.includes('sac fly')||ev.includes('sacrifice fly')){
+      if(scored.length)return`${name} hit a sacrifice fly, scoring ${scored[0]}`;
+      return`${name} hit a sacrifice fly`;
+    }
+    // Walk
+    if(ev.includes('walk')){
+      if(scored.length)return`${name} drew a walk, scoring ${scored[0]}`;
+      return`${name} drew a walk`;
+    }
+    // Groundout/forceout with RBI
+    if(ev.includes('groundout')||ev.includes('forceout')||ev.includes('grounds into')){
+      if(scored.length)return`${name} grounded out, scoring ${scored.join(' and ')}`;
+      if(rbi>0)return`${name} drove in a run on a groundout`;
+      return`${name} grounded out`;
+    }
+    // Field error
+    if(ev.includes('error')){
+      if(scored.length)return`${scored[0]} scored on an error by ${name}`;
+      return`a run scored on an error`;
+    }
+    // Hit by pitch
+    if(ev.includes('hit by pitch')){
+      if(scored.length)return`${name} was hit by a pitch, forcing in ${scored[0]}`;
+      return`${name} was hit by a pitch`;
+    }
+    // Fallback
+    if(scored.length)return`${name} came through, scoring ${scored.join(' and ')}`;
+    return`${name} came through`;
+  }
+
+  // Group scoring plays by half-inning
+  const innMap={};
+  plays.forEach(p=>{
+    const key=p.about.inning+'-'+(p.about.isTopInning?'t':'b');
+    if(!innMap[key])innMap[key]={runs:0,inning:p.about.inning,isTop:p.about.isTopInning,plays:[]};
+    innMap[key].runs+=Math.max(p.result.rbi||0,1);
+    innMap[key].plays.push(p);
+  });
+  const bigInning=Object.values(innMap).sort((a,b)=>b.runs-a.runs)[0];
+
+  // Find go-ahead play: last play where the eventual winner took a lead they never lost
+  let goAhead=null;
+  for(let k=plays.length-1;k>=0;k--){
+    const p=plays[k],r=p.result;
+    const isWinnerScoring=winner&&(
+      (homeR>awayR&&!p.about.isTopInning)||(awayR>homeR&&p.about.isTopInning));
+    if(isWinnerScoring){
+      const ws=p.about.isTopInning?r.awayScore:r.homeScore;
+      const ls=p.about.isTopInning?r.homeScore:r.awayScore;
+      if(ws>ls){goAhead=p;break}
+    }
+  }
+
+  // --- Build first paragraph: the decisive moment ---
+  let p1='';
+  if(goAhead){
+    const inn=ordinal(goAhead.about.inning);
+    const narr=narratePlay(goAhead);
+    p1=`${narr} in the ${inn}, giving ${the(winner)} the lead for good.`;
+
+    // Other plays in the same half-inning
+    const goKey=goAhead.about.inning+'-'+(goAhead.about.isTopInning?'t':'b');
+    const sameInn=innMap[goKey];
+    if(sameInn&&sameInn.plays.length>1){
+      const others=sameInn.plays.filter(pl=>pl!==goAhead);
+      const otherNarrs=others.slice(0,2).map(pl=>narratePlay(pl)).filter(Boolean);
+      if(otherNarrs.length===1)p1+=` ${otherNarrs[0]} in the same inning.`;
+      else if(otherNarrs.length>1)p1+=` Also in the ${inn}, ${otherNarrs.join(', and ')}.`;
+    }
+
+    // Earlier scoring by the winner
+    const earlierWinnerPlays=plays.filter(pl=>{
+      const isW=(homeR>awayR&&!pl.about.isTopInning)||(awayR>homeR&&pl.about.isTopInning);
+      return isW&&pl.about.inning<goAhead.about.inning;
+    });
+    if(earlierWinnerPlays.length>0&&!p1.includes('same inning')&&!p1.includes('Also in')){
+      const ep=earlierWinnerPlays[0];
+      const eInn=ordinal(ep.about.inning);
+      const eNarr=narratePlay(ep);
+      p1+=` Earlier, ${eNarr} in the ${eInn}.`;
+    }
+  }else if(bigInning&&bigInning.runs>=2){
+    const inn=ordinal(bigInning.inning);
+    const team=bigInning.isTop?awayName:homeName;
+    const narrs=bigInning.plays.slice(0,3).map(pl=>narratePlay(pl)).filter(Boolean);
+    p1=`${the(team,true)} broke through with a ${bigInning.runs}-run ${inn} inning`;
+    if(narrs.length===1)p1+=` — ${narrs[0]}`;
+    else if(narrs.length>1)p1+=`: ${narrs.join(', and ')}`;
+    p1+='.';
+  }else{
+    // Low-scoring or scattered
+    const first=plays[0];
+    const fTeam=first.about.isTopInning?awayName:homeName;
+    const fInn=ordinal(first.about.inning);
+    const fNarr=narratePlay(first);
+    p1=`${fNarr} in the ${fInn} to put ${the(fTeam)} on the board first.`;
+    if(plays.length>1){
+      const second=plays[1];
+      const sTeam=second.about.isTopInning?awayName:homeName;
+      if(sTeam!==fTeam){
+        const sInn=ordinal(second.about.inning);
+        const sNarr=narratePlay(second);
+        p1+=` ${sNarr} in the ${sInn} to answer for ${the(sTeam)}.`;
+      }
+    }
+  }
+
+  // --- Build second paragraph: losing team's response + insurance ---
+  let p2='';
+  if(loser&&plays.length>1){
+    const loserPlays=plays.filter(p=>
+      (loser===awayName&&p.about.isTopInning)||(loser===homeName&&!p.about.isTopInning));
+    const winnerPlays=plays.filter(p=>
+      (winner===awayName&&p.about.isTopInning)||(winner===homeName&&!p.about.isTopInning));
+
+    // Insurance runs after go-ahead
+    const insurancePlays=goAhead?winnerPlays.filter(p=>
+      p!==goAhead&&(p.about.inning>goAhead.about.inning||
+      (p.about.inning===goAhead.about.inning&&plays.indexOf(p)>plays.indexOf(goAhead)))):[];
+
+    // Loser's late push (7th inning or later)
+    const latePush=loserPlays.filter(p=>p.about.inning>=7);
+
+    if(latePush.length>0){
+      const narrs=latePush.slice(-2).map(lp=>{
+        const inn=ordinal(lp.about.inning);
+        return narratePlay(lp)+' in the '+inn;
+      });
+      p2=`${the(loser,true)} fought back — ${narrs.join(', and ')} — but couldn't complete the comeback.`;
+    }else if(loserPlays.length>0){
+      const lp=loserPlays[loserPlays.length-1];
+      const lInn=ordinal(lp.about.inning);
+      const lNarr=narratePlay(lp);
+      p2=`${the(loser,true)} got on the board when ${lNarr} in the ${lInn}, but never seriously threatened after that.`;
+    }else{
+      p2=`${the(loser,true)} couldn't generate enough offense to make it close.`;
+    }
+
+    // Insurance detail
+    if(insurancePlays.length>0){
+      const ip=insurancePlays[0];
+      const iNarr=narratePlay(ip);
+      const iInn=ordinal(ip.about.inning);
+      // Avoid repeating names already in p1 or p2
+      const ipName=batter(ip.result.description);
+      if(ipName&&!p1.includes(ipName)&&!p2.includes(ipName)){
+        p2+=` ${iNarr} in the ${iInn} for insurance.`;
+      }
+    }
+  }else if(!winner){
+    if(plays.length>=2){
+      const last=plays[plays.length-1];
+      const lTeam=last.about.isTopInning?awayName:homeName;
+      const lNarr=narratePlay(last);
+      p2=`${lNarr} tied it for ${the(lTeam)}, and neither side could break through after that.`;
+    }else{
+      p2='Neither side could separate, and the game ended in a tie.';
+    }
+  }
+
+  if(!p1&&!p2)p1='A quiet game with limited scoring opportunities on both sides.';
+  let html='';
+  if(p1)html+=`<p>${p1}</p>`;
+  if(p2)html+=`<p>${p2}</p>`;
+  return html;
+}
+
+function buildMeta(decisions,boxAway,boxHome){
+  const parts=[];
+  const w=decisions?.winner;
+  const l=decisions?.loser;
+  const sv=decisions?.save;
+  if(w)parts.push(`W: ${w.fullName}`);
+  if(l)parts.push(`L: ${l.fullName}`);
+  if(sv)parts.push(`S: ${sv.fullName}`);
+
+  // Key hitters: top by hits+rbi from both sides
+  const hitters=[];
+  [boxAway,boxHome].forEach(side=>{
+    const players=side.players||{};
+    (side.battingOrder||[]).forEach(id=>{
+      const p=players['ID'+id];
+      if(!p)return;
+      const s=p.stats?.batting;
+      if(!s||!s.atBats)return;
+      const val=(s.hits||0)+(s.rbi||0)+(s.homeRuns||0)*2;
+      if(val>=2)hitters.push({name:p.person.fullName,ab:s.atBats,h:s.hits||0,hr:s.homeRuns||0,rbi:s.rbi||0,r:s.runs||0,val});
+    });
+  });
+  hitters.sort((a,b)=>b.val-a.val);
+  const topH=hitters.slice(0,3);
+  if(topH.length){
+    const strs=topH.map(h=>{
+      let s=`${h.name} ${h.h}-${h.ab}`;
+      if(h.hr)s+=`, ${h.hr} HR`;
+      if(h.rbi)s+=`, ${h.rbi} RBI`;
+      return s;
+    });
+    parts.push('Key: '+strs.join('; '));
+  }
+  return parts.join(' • ');
+}
+
+function renderBoxScore(boxAway,boxHome,awayName,homeName,awayAbbr,homeAbbr){
+  function batTable(side,name){
+    const players=side.players||{};
+    const order=side.battingOrder||[];
+    let rows='';
+    let tAB=0,tR=0,tH=0,tRBI=0,tBB=0,tSO=0;
+    order.forEach(id=>{
+      const p=players['ID'+id];if(!p)return;
+      const s=p.stats?.batting;if(!s)return;
+      const pos=p.position?.abbreviation||'';
+      tAB+=s.atBats||0;tR+=s.runs||0;tH+=s.hits||0;tRBI+=s.rbi||0;tBB+=s.baseOnBalls||0;tSO+=s.strikeOuts||0;
+      rows+=`<tr><td>${p.person.fullName} <small>${pos}</small></td><td>${s.atBats||0}</td><td>${s.runs||0}</td><td>${s.hits||0}</td><td>${s.rbi||0}</td><td>${s.baseOnBalls||0}</td><td>${s.strikeOuts||0}</td><td>${s.avg||'.000'}</td></tr>`;
+    });
+    // Substitutes who aren't in batting order
+    Object.values(players).forEach(p=>{
+      if(!p.stats?.batting||!p.stats.batting.atBats)return;
+      if(order.includes(p.person.id))return;
+      const s=p.stats.batting;
+      const pos=p.position?.abbreviation||'';
+      tAB+=s.atBats||0;tR+=s.runs||0;tH+=s.hits||0;tRBI+=s.rbi||0;tBB+=s.baseOnBalls||0;tSO+=s.strikeOuts||0;
+      rows+=`<tr><td>${p.person.fullName} <small>${pos}</small></td><td>${s.atBats||0}</td><td>${s.runs||0}</td><td>${s.hits||0}</td><td>${s.rbi||0}</td><td>${s.baseOnBalls||0}</td><td>${s.strikeOuts||0}</td><td>${s.avg||'.000'}</td></tr>`;
+    });
+    rows+=`<tr class="totals"><td>Totals</td><td>${tAB}</td><td>${tR}</td><td>${tH}</td><td>${tRBI}</td><td>${tBB}</td><td>${tSO}</td><td></td></tr>`;
+    return`<h4>${name} Batting</h4><table><thead><tr><th>Player</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>SO</th><th>AVG</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function pitchTable(side,name){
+    const players=side.players||{};
+    const order=side.pitchers||[];
+    let rows='';
+    order.forEach(id=>{
+      const p=players['ID'+id];if(!p)return;
+      const s=p.stats?.pitching;if(!s)return;
+      rows+=`<tr><td>${p.person.fullName}</td><td>${formatIP(s.inningsPitched||'0')}</td><td>${s.hits||0}</td><td>${s.runs||0}</td><td>${s.earnedRuns||0}</td><td>${s.baseOnBalls||0}</td><td>${s.strikeOuts||0}</td><td>${s.era||'0.00'}</td></tr>`;
+    });
+    return`<h4>${name} Pitching</h4><table><thead><tr><th>Player</th><th>IP</th><th>H</th><th>R</th><th>ER</th><th>BB</th><th>SO</th><th>ERA</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  return batTable(boxAway,awayName)+batTable(boxHome,homeName)+pitchTable(boxAway,awayName)+pitchTable(boxHome,homeName);
+}
+
+function renderCard(game,liveData){
+  const away=game.teams.away;
+  const home=game.teams.home;
+  const at=away.team;
+  const ht=home.team;
+  const ls=liveData?.linescore||game.linescore||{};
+  const totals=ls.teams||{};
+  const aR=totals.away?.runs??away.score??0;
+  const hR=totals.home?.runs??home.score??0;
+  const aH=totals.away?.hits??'—';
+  const hH=totals.home?.hits??'—';
+  const aE=totals.away?.errors??'—';
+  const hE=totals.home?.errors??'—';
+  const aWin=aR>hR;
+  const hWin=hR>aR;
+  const aLogo=`https://a.espncdn.com/i/teamlogos/mlb/500/${at.fileCode||at.abbreviation?.toLowerCase()}.png`;
+  const hLogo=`https://a.espncdn.com/i/teamlogos/mlb/500/${ht.fileCode||ht.abbreviation?.toLowerCase()}.png`;
+
+  const plays=liveData?.plays;
+  const box=liveData?.boxscore;
+  const decisions=liveData?.decisions||{};
+
+  const summaryHtml=plays?buildSummary(plays.scoringPlays,plays.allPlays,decisions,at.teamName,ht.teamName,aR,hR):'';
+  const metaHtml=box?buildMeta(decisions,box.teams.away,box.teams.home):'';
+  const boxHtml=box?renderBoxScore(box.teams.away,box.teams.home,at.teamName,ht.teamName,at.abbreviation,ht.abbreviation):'';
+
+  const id='box-'+game.gamePk;
+  return`<article class="game-card">
+  <div class="scoreboard">
+    <div class="sb-top">Final</div>
+    <div class="sb-head"><div></div><div>R</div><div>H</div><div>E</div></div>
+    <div class="sb-row${aWin?' winner':''}">
+      <div class="team"><img src="${aLogo}" alt="${at.teamName}" class="team-logo"/><div class="team-name">${at.teamName}</div></div>
+      <div class="stat">${aR}</div><div class="stat">${aH}</div><div class="stat">${aE}</div>
+    </div>
+    <div class="sb-row${hWin?' winner':''}">
+      <div class="team"><img src="${hLogo}" alt="${ht.teamName}" class="team-logo"/><div class="team-name">${ht.teamName}</div></div>
+      <div class="stat">${hR}</div><div class="stat">${hH}</div><div class="stat">${hE}</div>
+    </div>
+  </div>
+  ${summaryHtml?`<div class="summary">${summaryHtml}</div>`:''}
+  ${metaHtml?`<div class="meta">${metaHtml}</div>`:''}
+  ${boxHtml?`<button class="box-toggle" onclick="toggleBox('${id}')">Box Score ▸</button><div class="box-content" id="${id}">${boxHtml}</div>`:''}
+</article>`;
+}
+
+function toggleBox(id){
+  const el=document.getElementById(id);
+  const btn=el.previousElementSibling;
+  el.classList.toggle('open');
+  btn.textContent=el.classList.contains('open')?'Box Score ▾':'Box Score ▸';
+}
+
+async function fetchLive(gamePk){
+  try{
+    const r=await fetch(`${API}/api/v1.1/game/${gamePk}/feed/live`);
+    if(!r.ok)return null;
+    const d=await r.json();
+    return d.liveData||null;
+  }catch(e){return null}
+}
+
+async function loadDate(which){
+  document.getElementById('btnYesterday').classList.toggle('active',which==='yesterday');
+  document.getElementById('btnToday').classList.toggle('active',which==='today');
+  const d=getDate(which);
+  document.getElementById('title').textContent=which==='yesterday'?'MLB Yesterday':'MLB Today';
+  document.getElementById('dateLabel').textContent=fmtDate(d);
+  const container=document.getElementById('games');
+  container.innerHTML='<div class="loading">Loading games…</div>';
+
+  try{
+    const r=await fetch(`${API}/api/v1/schedule?date=${d}&sportId=1&hydrate=team,linescore,decisions`);
+    const data=await r.json();
+    const games=(data.dates||[])[0]?.games||[];
+    const final=games.filter(g=>g.status?.abstractGameState==='Final');
+    if(!final.length){container.innerHTML='<div class="no-games">No completed games for this date.</div>';return}
+
+    final.sort((a,b)=>sortKey(a)-sortKey(b)||new Date(a.gameDate)-new Date(b.gameDate));
+
+    // Fetch live data for all games in parallel
+    const liveResults=await Promise.all(final.map(g=>fetchLive(g.gamePk)));
+    const liveMap={};
+    final.forEach((g,i)=>{liveMap[g.gamePk]=liveResults[i]});
+
+    container.innerHTML=final.map(g=>renderCard(g,liveMap[g.gamePk])).join('');
+  }catch(e){
+    container.innerHTML=`<div class="no-games">Error loading games: ${e.message}</div>`;
+  }
+}
+
+loadDate('yesterday');
+</script>
+</body>
+</html>
