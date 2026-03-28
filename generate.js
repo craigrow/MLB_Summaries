@@ -142,7 +142,6 @@ function buildGameContext(game, standings, series, attendance) {
 
   // Series
   const { gameNum, seriesLen, priorResults } = series;
-  if (seriesLen !== 3) lines.push(`Unusual series length: ${seriesLen}-game series`);
   if (gameNum === 1) {
     lines.push(`Series opener (${seriesLen}-game series)`);
   } else {
@@ -233,8 +232,9 @@ Voice and style:
 
 Content rules:
 - Start with whatever makes this game interesting — could be a big swing, a pitching duel, a collapse, a streak.
-- Weave in context naturally when provided: standings race, series situation, attendance, streaks. Don't force it — mention it only when it adds meaning.
-- If it's a series game beyond the opener, note the series score. If it's a sweep or rubber match, that's the story.
+- Context (standings, series score, attendance, streaks) is seasoning, not the main course. Use it only when it genuinely adds to the story — a pennant race, a sweep, a sellout crowd. Don't mention attendance in every recap.
+- If it's a series game beyond the opener, the series score is worth noting. Sweeps and rubber matches are inherently interesting.
+- Don't explain things the reader already knows (e.g. don't call a 4-game series "unusual" — fans know).
 - If it's spring training, keep the tone lighter — don't write like it's October.
 - Name 1-3 key players. Don't just list stats — connect them to the story.
 - The final score can appear in the lede when it tells the story (blowouts, upsets), but don't lead with JUST the score.
