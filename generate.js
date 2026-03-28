@@ -44,8 +44,152 @@ function sortKey(game) {
   return Math.min(SORT_ORDER[a] ?? 99, SORT_ORDER[h] ?? 99);
 }
 
+// --- Venue capacities (approximate) ---
+const VENUE_CAPACITY = {
+  1:41168,2:37755,3:45609,4:36742,5:42445,7:37305,10:41922,12:40615,
+  14:40963,15:41339,17:46537,19:41915,22:40300,31:41268,32:36107,
+  680:40209,681:41546,2394:42319,2395:41503,2602:40094,2680:47929,
+  2889:36025,3289:42271,3309:40615,3312:41168,3313:43651,4169:40000,
+  5325:35000,2392:40720,2393:36973,15:41339
+};
+
+// --- Standings lookup ---
+async function fetchStandings(date) {
+  const map = {};
+  try {
+    const data = await fetchJSON(`${API}/api/v1/standings?leagueId=103,104&date=${date}&hydrate=team`);
+    for (const rec of data.records || []) {
+      const div = rec.division?.name || '';
+      for (const tr of rec.teamRecords || []) {
+        const abbr = tr.team?.abbreviation;
+        if (!abbr) continue;
+        map[abbr] = {
+          w: tr.wins, l: tr.losses,
+          pct: tr.winningPercentage || '',
+          gb: tr.gamesBack === '-' ? '0' : tr.gamesBack,
+          streak: tr.streak?.streakCode || '',
+          div,
+          divRank: tr.divisionRank || ''
+        };
+      }
+    }
+  } catch (e) { console.error(`  Standings fetch failed: ${e.message}`); }
+  return map;
+}
+
+// --- Series context ---
+async function fetchSeriesContext(game, date) {
+  const awayId = game.teams.away.team.id;
+  const homeId = game.teams.home.team.id;
+  const seriesNum = game.seriesGameNumber || 1;
+  const seriesLen = game.gamesInSeries || 3;
+  const ctx = { gameNum: seriesNum, seriesLen, priorResults: [] };
+
+  if (seriesNum <= 1) return ctx;
+
+  try {
+    // Look back up to 5 days for prior series games
+    const start = new Date(date + 'T12:00:00');
+    start.setDate(start.getDate() - 5);
+    const startStr = start.toISOString().slice(0, 10);
+    const url = `${API}/api/v1/schedule?startDate=${startStr}&endDate=${date}&sportId=1&teamId=${homeId}&hydrate=team,linescore`;
+    const sched = await fetchJSON(url);
+    for (const d of sched.dates || []) {
+      for (const g of d.games || []) {
+        if (g.gamePk === game.gamePk) continue;
+        if (g.status?.abstractGameState !== 'Final') continue;
+        const ga = g.teams.away.team.id, gh = g.teams.home.team.id;
+        if (!((ga === awayId && gh === homeId) || (ga === homeId && gh === awayId))) continue;
+        const aR = g.teams.away.score ?? 0, hR = g.teams.home.score ?? 0;
+        ctx.priorResults.push({
+          awayScore: aR, homeScore: hR,
+          awayWon: aR > hR, homeWon: hR > aR,
+          awayId: ga, homeId: gh
+        });
+      }
+    }
+  } catch (e) { console.error(`    Series context fetch failed: ${e.message}`); }
+  return ctx;
+}
+
+// --- Attendance ---
+function getAttendance(liveData, venueId) {
+  let attendance = null;
+  const info = liveData?.boxscore?.info || [];
+  for (const item of info) {
+    if (item.label === 'Att' || item.label === 'Attendance') {
+      attendance = parseInt(String(item.value).replace(/,/g, ''), 10) || null;
+      break;
+    }
+  }
+  const capacity = VENUE_CAPACITY[venueId] || null;
+  return { attendance, capacity };
+}
+
+// --- Build context string for LLM ---
+function buildGameContext(game, standings, series, attendance) {
+  const lines = [];
+  const gameType = game.gameType;
+  if (gameType === 'S') lines.push('Game type: Spring Training');
+  else if (gameType === 'R') lines.push('Game type: Regular Season');
+  else if (gameType === 'P' || gameType === 'F' || gameType === 'D' || gameType === 'L' || gameType === 'W') lines.push('Game type: Postseason');
+
+  const aa = game.teams.away.team.abbreviation;
+  const ha = game.teams.home.team.abbreviation;
+  const as = standings[aa], hs = standings[ha];
+  if (as) lines.push(`${aa}: ${as.w}-${as.l}${as.divRank ? ', ' + ordinal(as.divRank) + ' in ' + shortDiv(as.div) : ''}${as.gb !== '0' ? ', ' + as.gb + ' GB' : as.divRank === '1' ? ', leading division' : ''}${as.streak ? ', streak: ' + as.streak : ''}`);
+  if (hs) lines.push(`${ha}: ${hs.w}-${hs.l}${hs.divRank ? ', ' + ordinal(hs.divRank) + ' in ' + shortDiv(hs.div) : ''}${hs.gb !== '0' ? ', ' + hs.gb + ' GB' : hs.divRank === '1' ? ', leading division' : ''}${hs.streak ? ', streak: ' + hs.streak : ''}`);
+
+  // Series
+  const { gameNum, seriesLen, priorResults } = series;
+  if (seriesLen !== 3) lines.push(`Unusual series length: ${seriesLen}-game series`);
+  if (gameNum === 1) {
+    lines.push(`Series opener (${seriesLen}-game series)`);
+  } else {
+    const awayId = game.teams.away.team.id;
+    let awayWins = 0, homeWins = 0;
+    for (const r of priorResults) {
+      if ((r.awayId === awayId && r.awayWon) || (r.homeId === awayId && r.homeWon)) awayWins++;
+      else homeWins++;
+    }
+    const an = game.teams.away.team.teamName, hn = game.teams.home.team.teamName;
+    let seriesLine = `Game ${gameNum} of ${seriesLen}: `;
+    if (awayWins === homeWins) seriesLine += `Series tied ${awayWins}-${homeWins}`;
+    else if (awayWins > homeWins) seriesLine += `${an} lead series ${awayWins}-${homeWins}`;
+    else seriesLine += `${hn} lead series ${homeWins}-${awayWins}`;
+    if (gameNum === seriesLen) {
+      if (awayWins === homeWins) seriesLine += ' (rubber match)';
+      else if (awayWins === 0 || homeWins === 0) seriesLine += ' (sweep attempt)';
+      else seriesLine += ' (series finale)';
+    }
+    lines.push(seriesLine);
+  }
+
+  // Attendance
+  if (attendance.attendance) {
+    let attLine = `Attendance: ${attendance.attendance.toLocaleString()}`;
+    if (attendance.capacity) {
+      const pct = Math.round(attendance.attendance / attendance.capacity * 100);
+      if (pct >= 95) attLine += ` (near sellout, capacity ${attendance.capacity.toLocaleString()})`;
+      else if (pct <= 40) attLine += ` (sparse crowd, capacity ${attendance.capacity.toLocaleString()})`;
+    }
+    lines.push(attLine);
+  }
+
+  return lines.join('\n');
+}
+
+function ordinal(n) {
+  const s = ['th','st','nd','rd'], v = parseInt(n) % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+function shortDiv(d) {
+  return d.replace('American League ', 'AL ').replace('National League ', 'NL ');
+}
+
 // --- LLM Summary ---
-async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters) {
+async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters, gameContext) {
   const plays = scoringPlays.map(i => allPlays[i]).filter(Boolean);
   const playDescs = plays.map(p => {
     const a = p.about;
@@ -67,6 +211,7 @@ async function generateSummary(scoringPlays, allPlays, decisions, awayName, home
   const userMsg = `Game: ${awayName} ${awayR}, ${homeName} ${homeR}
 Winning pitcher: ${w}
 Losing pitcher: ${l}${sv ? '\nSave: ' + sv : ''}
+${gameContext ? '\nContext:\n' + gameContext : ''}
 
 Scoring plays:
 ${playDescs}
@@ -77,21 +222,111 @@ ${hitterLines}`;
   const body = {
     model: 'gpt-4o-mini',
     messages: [
-      { role: 'system', content: `Write a short baseball game recap in natural newspaper-style English. Two paragraphs, no more.
+      { role: 'system', content: `You are a veteran baseball beat writer. Write a 2-3 paragraph game recap that sounds like it belongs in a morning newspaper sports section. Use 2 paragraphs for straightforward games, 3 for extras, walk-offs, or complex finishes.
 
-Rules:
-- Start with the key turning point or decisive stretch — do NOT restate the final score.
-- Name the players involved in the big hits and pitching moments.
-- Use "the" before team names (e.g. "the Mariners").
-- Do not narrate inning-by-inning unless needed for flow.
-- Avoid robotic phrasing and redundancy with the box score.
-- Sound like a real game recap from a newspaper sports section.
-- All facts must come from the provided data. Do not invent anything.
-- Keep it concise — two short paragraphs.` },
+Voice and style:
+- Write with personality. Vary your sentence structure and openings across games.
+- Never start with "The turning point" or "The decisive moment" — find a more natural way in.
+- Use active, punchy verbs. No hedging ("managed to," "contributed with," "bolstered by").
+- Trust the reader — don't overexplain what a home run or a save means.
+- Use "the" before team names in prose.
+
+Content rules:
+- Start with whatever makes this game interesting — could be a big swing, a pitching duel, a collapse, a streak.
+- Weave in context naturally when provided: standings race, series situation, attendance, streaks. Don't force it — mention it only when it adds meaning.
+- If it's a series game beyond the opener, note the series score. If it's a sweep or rubber match, that's the story.
+- If it's spring training, keep the tone lighter — don't write like it's October.
+- Name 1-3 key players. Don't just list stats — connect them to the story.
+- The final score can appear in the lede when it tells the story (blowouts, upsets), but don't lead with JUST the score.
+- Do NOT narrate inning-by-inning.
+- Do NOT repeat information that's in the box score footer (W/L/key hitters line).
+- All facts must come from the provided data. Invent nothing.` },
+      { role: 'user', content: `Game: Cubs 10, Nationals 2
+Winning pitcher: Cade Horton
+Losing pitcher: Trevor Williams
+
+Context:
+Game type: Regular Season
+CHC: 1-1, 3rd in NL Central
+WSH: 1-1, 4th in NL East
+Game 2 of 3: Series tied 1-1 after Nationals won 10-4 on opening day
+
+Scoring plays:
+Top 1: Nico Hoerner singles, scoring Happ (1-0)
+Top 3: Miguel Amaya homers to left (2-0)
+Top 5: Matt Shaw singles, scoring Crow-Armstrong (3-0)
+Top 6: Ian Happ homers to right-center, scoring Hoerner and Shaw (6-0)
+Top 6: Carson Kelly singles, scoring Amaya (7-0)
+Bottom 7: CJ Abrams doubles, scoring Garcia (7-1)
+Top 8: Crow-Armstrong singles, scoring Hoerner (8-1)
+Top 9: Amaya doubles, scoring Shaw (9-1)
+Top 9: Suzuki singles, scoring Amaya (10-1)
+Bottom 9: Abrams singles, scoring Ruiz (10-2)
+
+Key hitters:
+Ian Happ: 2-for-5, 1 HR, 3 RBI
+Miguel Amaya: 2-for-5, 1 HR, 2 RBI
+Pete Crow-Armstrong: 2-for-5, 1 RBI` },
+      { role: 'assistant', content: `Cade Horton threw four-hit ball into the seventh inning, Ian Happ broke the game open with a three-run homer in the sixth and the Cubs routed the Nationals 10-2 on Saturday.
+
+Miguel Amaya homered and finished with two hits and two RBIs, and Pete Crow-Armstrong added two hits. Nico Hoerner, Matt Shaw and Carson Kelly drove in runs as the Cubs avenged Thursday's 10-4 opening day loss.` },
+      { role: 'user', content: `Game: Cardinals 6, Rays 5 (10 innings)
+Winning pitcher: JoJo Romero
+Losing pitcher: Griffin Jax
+
+Context:
+Game type: Regular Season
+STL: 1-1, 3rd in NL Central
+TB: 0-2, 5th in AL East
+Game 2 of 3: Series tied 1-1
+
+Scoring plays:
+Bottom 1: Masyn Winn singles, scoring Contreras (1-0)
+Top 3: Yandy Diaz homers to left (1-1)
+Bottom 5: Nolan Arenado singles, scoring Goldschmidt (2-1)
+Top 7: Amed Rosario doubles, scoring Diaz (2-2)
+Top 8: Junior Caminero homers to center, scoring Rosario and Diaz (2-5)
+Bottom 8: Contreras singles, scoring Winn (3-5)
+Bottom 8: Goldschmidt singles, scoring Burleson (4-5)
+Bottom 9: Arenado sacrifice fly, scoring Contreras (5-5)
+Bottom 10: Wetherholt singles to right, scoring Church and Walker (6-5)
+
+Key hitters:
+JJ Wetherholt: 1-for-3, 2 RBI
+Nolan Arenado: 1-for-4, 2 RBI
+Junior Caminero: 1-for-4, 1 HR, 3 RBI` },
+      { role: 'assistant', content: `St. Louis rookie JJ Wetherholt lined a two-run, 10th-inning single after Michael McGreevy tossed six hitless innings to help the Cardinals beat the Rays 6-5 on Saturday.
+
+Wetherholt, the seventh pick of the 2024 MLB amateur draft, lined a single to right field off Griffin Jax in his second career game.
+
+Jax walked Jordan Walker on four pitches to start the bottom of the 10th, and Victor Scott II laid down a sacrifice bunt to advance Walker and automatic runner Nathan Church into scoring position.` },
+      { role: 'user', content: `Game: Marlins 2, Rockies 1
+Winning pitcher: Sandy Alcantara
+Losing pitcher: Kyle Freeland
+Save: Tanner Scott
+
+Context:
+Game type: Regular Season
+MIA: 1-0, 5th in NL East
+COL: 0-1, 5th in NL West
+Series opener (3-game series)
+
+Scoring plays:
+Bottom 3: Sanoja singles, scoring Chisholm (1-0)
+Top 5: Toglia homers to right (1-1)
+Bottom 7: Burger singles, scoring Sanoja (2-1)
+
+Key hitters:
+Javier Sanoja: 3-for-4, 1 RBI
+Sandy Alcantara: 7 IP, 4 H, 1 R, 5 K
+Jake Burger: 1-for-3, 1 RBI` },
+      { role: 'assistant', content: `Javier Sanoja had three hits, Sandy Alcantara allowed one run over seven innings and the Marlins opened the season with a 2-1 win over the Rockies on Friday night.
+
+Alcantara made his franchise-leading sixth start on opening day and struck out five, allowed four hits and walked two. It was a promising beginning to the season for the 2022 NL Cy Young award winner after a rollercoaster 2025 during which he went 11-13 with a 5.36 ERA while facing trade rumors.` },
       { role: 'user', content: userMsg }
     ],
     temperature: 0.7,
-    max_tokens: 300
+    max_tokens: 400
   };
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -206,6 +441,10 @@ async function main() {
 
   final.sort((a, b) => sortKey(a) - sortKey(b) || new Date(a.gameDate) - new Date(b.gameDate));
 
+  // Fetch standings once for all games
+  const standings = await fetchStandings(date);
+  console.log(`  Standings loaded for ${Object.keys(standings).length} teams`);
+
   const cards = [];
   for (const game of final) {
     const away = game.teams.away;
@@ -238,11 +477,17 @@ async function main() {
     const plays = liveData?.plays;
     const decisions = liveData?.decisions || {};
 
+    // Fetch enrichment context
+    const series = await fetchSeriesContext(game, date);
+    const venueId = game.venue?.id;
+    const att = getAttendance(liveData, venueId);
+    const gameContext = buildGameContext(game, standings, series, att);
+
     // Generate LLM summary
     let summaryHtml = '';
     if (plays) {
       const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home) : [];
-      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters);
+      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, gameContext);
       if (summary) {
         summaryHtml = summary.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
       }
