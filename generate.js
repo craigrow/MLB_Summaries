@@ -532,6 +532,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 header{margin:4px 4px 18px}
 h1{font-size:1.9rem;line-height:1.1;margin:0 0 4px}
 .subtitle{color:var(--muted);font-size:.98rem;margin-bottom:10px}
+nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+nav a{display:inline-block;padding:8px 16px;background:var(--card);border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-weight:600;font-size:.9rem}
+nav a.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
 .grid{display:grid;gap:18px}
 .game-card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .scoreboard{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
@@ -572,6 +575,11 @@ h1{font-size:1.9rem;line-height:1.1;margin:0 0 4px}
     <h1>MLB Yesterday</h1>
     <div class="subtitle">${fmtDate(date)}</div>
   </header>
+  <nav>
+    <a href="index.html" class="active">Scores</a>
+    <a href="standings.html">Standings</a>
+    <a href="leaders.html">Leaders</a>
+  </nav>
   <section class="grid">
     ${cards.length ? cards.join('\n') : '<div class="no-games">No completed games for this date.</div>'}
   </section>
