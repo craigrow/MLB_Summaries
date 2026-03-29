@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MLB Standings</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--line:#d1d5db;--muted:#6b7280;--text:#111827;--accent:#1d4ed8}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.page{max-width:860px;margin:0 auto;padding:20px 14px 40px}
+header{margin:4px 4px 18px}
+h1{font-size:1.9rem;line-height:1.1;margin:0 0 4px}
+.subtitle{color:var(--muted);font-size:.98rem;margin-bottom:10px}
+nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+nav a{display:inline-block;padding:8px 16px;background:var(--card);border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);font-weight:600;font-size:.9rem}
+nav a.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.division{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:14px}
+.division h2{font-size:1.1rem;margin-bottom:10px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:8px 6px;text-align:center;border-bottom:1px solid #e5e7eb}
+th{font-weight:700;color:var(--muted);font-size:.78rem}
+.team-cell{text-align:left;white-space:nowrap}
+.logo{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:8px}
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>MLB Standings</h1>
+    <div class="subtitle">March 29, 2026</div>
+  </header>
+  <nav>
+    <a href="index.html">Scores</a>
+    <a href="standings.html" class="active">Standings</a>
+    <a href="leaders.html">Leaders</a>
+  </nav>
+  <div class="division">
+      <h2>AL West</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/ana.png" alt="LAA" class="logo"/>Angels</td>
+        <td>2</td><td>1</td><td>.667</td><td>—</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/tex.png" alt="TEX" class="logo"/>Rangers</td>
+        <td>1</td><td>1</td><td>.500</td><td>0.5</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/hou.png" alt="HOU" class="logo"/>Astros</td>
+        <td>1</td><td>2</td><td>.333</td><td>1.0</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/sea.png" alt="SEA" class="logo"/>Mariners</td>
+        <td>1</td><td>2</td><td>.333</td><td>1.0</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/ath.png" alt="ATH" class="logo"/>Athletics</td>
+        <td>0</td><td>2</td><td>.000</td><td>1.5</td>
+        <td>L2</td>
+      </tr></tbody></table>
+    </div><div class="division">
+      <h2>AL East</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png" alt="NYY" class="logo"/>Yankees</td>
+        <td>3</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W3</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/tor.png" alt="TOR" class="logo"/>Blue Jays</td>
+        <td>2</td><td>0</td><td>1.000</td><td>0.5</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/bal.png" alt="BAL" class="logo"/>Orioles</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.5</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/bos.png" alt="BOS" class="logo"/>Red Sox</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.5</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/tb.png" alt="TB" class="logo"/>Rays</td>
+        <td>0</td><td>2</td><td>.000</td><td>2.5</td>
+        <td>L2</td>
+      </tr></tbody></table>
+    </div><div class="division">
+      <h2>AL Central</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/cle.png" alt="CLE" class="logo"/>Guardians</td>
+        <td>2</td><td>1</td><td>.667</td><td>—</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/det.png" alt="DET" class="logo"/>Tigers</td>
+        <td>2</td><td>1</td><td>.667</td><td>—</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/min.png" alt="MIN" class="logo"/>Twins</td>
+        <td>1</td><td>1</td><td>.500</td><td>0.5</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/kc.png" alt="KC" class="logo"/>Royals</td>
+        <td>0</td><td>2</td><td>.000</td><td>1.5</td>
+        <td>L2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/cws.png" alt="CWS" class="logo"/>White Sox</td>
+        <td>0</td><td>2</td><td>.000</td><td>1.5</td>
+        <td>L2</td>
+      </tr></tbody></table>
+    </div><div class="division">
+      <h2>NL West</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/la.png" alt="LAD" class="logo"/>Dodgers</td>
+        <td>3</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W3</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/sd.png" alt="SD" class="logo"/>Padres</td>
+        <td>1</td><td>2</td><td>.333</td><td>2.0</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/col.png" alt="COL" class="logo"/>Rockies</td>
+        <td>0</td><td>2</td><td>.000</td><td>2.5</td>
+        <td>L2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/ari.png" alt="AZ" class="logo"/>D-backs</td>
+        <td>0</td><td>3</td><td>.000</td><td>3.0</td>
+        <td>L3</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/sf.png" alt="SF" class="logo"/>Giants</td>
+        <td>0</td><td>3</td><td>.000</td><td>3.0</td>
+        <td>L3</td>
+      </tr></tbody></table>
+    </div><div class="division">
+      <h2>NL East</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/mia.png" alt="MIA" class="logo"/>Marlins</td>
+        <td>2</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/nym.png" alt="NYM" class="logo"/>Mets</td>
+        <td>2</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/atl.png" alt="ATL" class="logo"/>Braves</td>
+        <td>2</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/was.png" alt="WSH" class="logo"/>Nationals</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.0</td>
+        <td>L1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/phi.png" alt="PHI" class="logo"/>Phillies</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.0</td>
+        <td>L1</td>
+      </tr></tbody></table>
+    </div><div class="division">
+      <h2>NL Central</h2>
+      <table><thead><tr><th class="team-cell">Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STRK</th></tr></thead>
+      <tbody><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/mil.png" alt="MIL" class="logo"/>Brewers</td>
+        <td>2</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/stl.png" alt="STL" class="logo"/>Cardinals</td>
+        <td>2</td><td>0</td><td>1.000</td><td>—</td>
+        <td>W2</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/chc.png" alt="CHC" class="logo"/>Cubs</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.0</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/cin.png" alt="CIN" class="logo"/>Reds</td>
+        <td>1</td><td>1</td><td>.500</td><td>1.0</td>
+        <td>W1</td>
+      </tr><tr>
+        <td class="team-cell"><img src="https://a.espncdn.com/i/teamlogos/mlb/500/pit.png" alt="PIT" class="logo"/>Pirates</td>
+        <td>0</td><td>2</td><td>.000</td><td>2.0</td>
+        <td>L2</td>
+      </tr></tbody></table>
+    </div>
+</main>
+</body>
+</html>
