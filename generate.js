@@ -136,6 +136,7 @@ function buildGameContext(game, standings, series, attendance) {
 
   const aa = game.teams.away.team.abbreviation;
   const ha = game.teams.home.team.abbreviation;
+  if (aa === 'SEA' || ha === 'SEA') lines.push('NOTE: The reader is a Mariners fan. Write with slightly more depth and from their perspective — not homer-ish, but the reader cares more about Seattle.');
   const as = standings[aa], hs = standings[ha];
   if (as) lines.push(`${aa}: ${as.w}-${as.l}${as.divRank ? ', ' + ordinal(as.divRank) + ' in ' + shortDiv(as.div) : ''}${as.gb !== '0' ? ', ' + as.gb + ' GB' : as.divRank === '1' ? ', leading division' : ''}${as.streak ? ', streak: ' + as.streak : ''}`);
   if (hs) lines.push(`${ha}: ${hs.w}-${hs.l}${hs.divRank ? ', ' + ordinal(hs.divRank) + ' in ' + shortDiv(hs.div) : ''}${hs.gb !== '0' ? ', ' + hs.gb + ' GB' : hs.divRank === '1' ? ', leading division' : ''}${hs.streak ? ', streak: ' + hs.streak : ''}`);
@@ -207,7 +208,8 @@ async function generateSummary(scoringPlays, allPlays, decisions, awayName, home
     return s;
   }).join('\n');
 
-  const userMsg = `Game: ${awayName} ${awayR}, ${homeName} ${homeR}
+  const userMsg = `Game: ${awayName} at ${homeName}, ${awayR}-${homeR}
+Venue: ${homeName} home game
 Winning pitcher: ${w}
 Losing pitcher: ${l}${sv ? '\nSave: ' + sv : ''}
 ${gameContext ? '\nContext:\n' + gameContext : ''}
@@ -221,7 +223,7 @@ ${hitterLines}`;
   const body = {
     model: 'gpt-4o-mini',
     messages: [
-      { role: 'system', content: `You are a veteran baseball beat writer. Write a 2-3 paragraph game recap that sounds like it belongs in a morning newspaper sports section. Use 2 paragraphs for straightforward games, 3 for extras, walk-offs, or complex finishes.
+      { role: 'system', content: `You are a veteran baseball beat writer. Write a 2-paragraph game recap that sounds like it belongs in a morning newspaper sports section. Always exactly two paragraphs — no more.
 
 Voice and style:
 - Write with personality. Vary your sentence structure and openings across games.
@@ -297,9 +299,7 @@ Nolan Arenado: 1-for-4, 2 RBI
 Junior Caminero: 1-for-4, 1 HR, 3 RBI` },
       { role: 'assistant', content: `St. Louis rookie JJ Wetherholt lined a two-run, 10th-inning single after Michael McGreevy tossed six hitless innings to help the Cardinals beat the Rays 6-5 on Saturday.
 
-Wetherholt, the seventh pick of the 2024 MLB amateur draft, lined a single to right field off Griffin Jax in his second career game.
-
-Jax walked Jordan Walker on four pitches to start the bottom of the 10th, and Victor Scott II laid down a sacrifice bunt to advance Walker and automatic runner Nathan Church into scoring position.` },
+Wetherholt, the seventh pick of the 2024 MLB amateur draft, singled to right off Griffin Jax in his second career game after Jax walked Jordan Walker on four pitches to open the 10th and Victor Scott II bunted the runners into scoring position.` },
       { role: 'user', content: `Game: Marlins 2, Rockies 1
 Winning pitcher: Sandy Alcantara
 Losing pitcher: Kyle Freeland
