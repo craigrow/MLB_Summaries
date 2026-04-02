@@ -141,6 +141,13 @@ function buildGameContext(game, standings, series, attendance) {
   if (as) lines.push(`${aa}: ${as.w}-${as.l}${as.divRank ? ', ' + ordinal(as.divRank) + ' in ' + shortDiv(as.div) : ''}${as.gb !== '0' ? ', ' + as.gb + ' GB' : as.divRank === '1' ? ', leading division' : ''}${as.streak ? ', streak: ' + as.streak : ''}`);
   if (hs) lines.push(`${ha}: ${hs.w}-${hs.l}${hs.divRank ? ', ' + ordinal(hs.divRank) + ' in ' + shortDiv(hs.div) : ''}${hs.gb !== '0' ? ', ' + hs.gb + ' GB' : hs.divRank === '1' ? ', leading division' : ''}${hs.streak ? ', streak: ' + hs.streak : ''}`);
 
+  // Season progress (helps LLM avoid calling every series opener a "season opener")
+  if (hs) {
+    const teamGames = hs.w + hs.l + 1; // +1 for current game
+    if (teamGames === 1) lines.push('Opening Day');
+    else lines.push(`Season game ${teamGames} for ${ha}`);
+  }
+
   // Series
   const { gameNum, seriesLen, priorResults } = series;
   if (gameNum === 1) {
@@ -166,14 +173,10 @@ function buildGameContext(game, standings, series, attendance) {
   }
 
   // Attendance
-  if (attendance.attendance) {
-    let attLine = `Attendance: ${attendance.attendance.toLocaleString()}`;
-    if (attendance.capacity) {
-      const pct = Math.round(attendance.attendance / attendance.capacity * 100);
-      if (pct >= 95) attLine += ` (near sellout, capacity ${attendance.capacity.toLocaleString()})`;
-      else if (pct <= 40) attLine += ` (sparse crowd, capacity ${attendance.capacity.toLocaleString()})`;
-    }
-    lines.push(attLine);
+  if (attendance.attendance && attendance.capacity) {
+    const pct = Math.round(attendance.attendance / attendance.capacity * 100);
+    if (pct >= 95) lines.push(`Attendance: ${attendance.attendance.toLocaleString()} (near sellout, capacity ${attendance.capacity.toLocaleString()})`);
+    else if (pct <= 40) lines.push(`Attendance: ${attendance.attendance.toLocaleString()} (sparse crowd, capacity ${attendance.capacity.toLocaleString()})`);
   }
 
   return lines.join('\n');
@@ -232,9 +235,17 @@ Voice and style:
 - Trust the reader — don't overexplain what a home run or a save means.
 - Use "the" before team names in prose.
 
+Vocabulary variety (CRITICAL):
+- You are writing ALL of today's recaps, not just one. Every summary must read differently.
+- NEVER reuse the same phrase across multiple recaps. If you wrote "rubber match" once, don't use it again — say "deciding game," "series finale," "clinching the three-game set," "securing a 2-1 series win," or just let the context speak for itself.
+- Rotate how you describe series outcomes: "took the series," "won two of three," "claimed the series," "earned a series victory," or weave it into the narrative naturally without a label.
+- Vary comeback language: "rallied," "stormed back," "erased a deficit," "answered with," "clawed back," "turned it around in the seventh."
+- Vary blowout language: "cruised," "rolled," "routed," "ran away with it," "put it out of reach early."
+- If a phrase feels like something every sportswriter defaults to, find a fresher way to say it.
+
 Content rules:
 - Start with whatever makes this game interesting — could be a big swing, a pitching duel, a collapse, a streak.
-- Context (standings, series score, attendance, streaks) is seasoning, not the main course. Use it only when it genuinely adds to the story — a pennant race, a sweep, a sellout crowd. Don't mention attendance in every recap.
+- Context (standings, series score, attendance, streaks) is seasoning, not the main course. Use it only when it genuinely adds to the story — a pennant race, a sweep, a sellout crowd. Only mention attendance if it's a sellout or a notably empty stadium — otherwise skip it entirely.
 - If it's a series game beyond the opener, the series score is worth noting. Sweeps and rubber matches are inherently interesting.
 - Don't explain things the reader already knows (e.g. don't call a 4-game series "unusual" — fans know).
 - If it's spring training, keep the tone lighter — don't write like it's October.
@@ -309,6 +320,7 @@ Context:
 Game type: Regular Season
 MIA: 1-0, 5th in NL East
 COL: 0-1, 5th in NL West
+Season game 2 for COL
 Series opener (3-game series)
 
 Scoring plays:
@@ -320,9 +332,9 @@ Key hitters:
 Javier Sanoja: 3-for-4, 1 RBI
 Sandy Alcantara: 7 IP, 4 H, 1 R, 5 K
 Jake Burger: 1-for-3, 1 RBI` },
-      { role: 'assistant', content: `Javier Sanoja had three hits, Sandy Alcantara allowed one run over seven innings and the Marlins opened the season with a 2-1 win over the Rockies on Friday night.
+      { role: 'assistant', content: `Javier Sanoja had three hits, Sandy Alcantara allowed one run over seven innings and the Marlins beat the Rockies 2-1 on Friday night.
 
-Alcantara made his franchise-leading sixth start on opening day and struck out five, allowed four hits and walked two. It was a promising beginning to the season for the 2022 NL Cy Young award winner after a rollercoaster 2025 during which he went 11-13 with a 5.36 ERA while facing trade rumors.` },
+Alcantara struck out five, allowed four hits and walked two in a promising start for the 2022 NL Cy Young award winner after a rollercoaster 2025 during which he went 11-13 with a 5.36 ERA while facing trade rumors. Jake Burger drove in the go-ahead run with a seventh-inning single, giving Alcantara and the bullpen enough to work with.` },
       { role: 'user', content: userMsg }
     ],
     temperature: 0.7,
@@ -430,6 +442,8 @@ function renderBoxScore(boxAway, boxHome, awayName, homeName) {
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // --- Main ---
+const ESPN_LOGO_CODE = { AZ: 'ari' };
+
 async function main() {
   const date = yesterday();
   console.log(`Generating digest for ${date}`);
@@ -470,8 +484,8 @@ async function main() {
     const hE = totals.home?.errors ?? '—';
     const aWin = aR > hR;
     const hWin = hR > aR;
-    const aLogo = `https://a.espncdn.com/i/teamlogos/mlb/500/${at.fileCode || at.abbreviation?.toLowerCase()}.png`;
-    const hLogo = `https://a.espncdn.com/i/teamlogos/mlb/500/${ht.fileCode || ht.abbreviation?.toLowerCase()}.png`;
+    const aLogo = `https://a.espncdn.com/i/teamlogos/mlb/500/${ESPN_LOGO_CODE[at.abbreviation] || at.abbreviation?.toLowerCase() || at.fileCode}.png`;
+    const hLogo = `https://a.espncdn.com/i/teamlogos/mlb/500/${ESPN_LOGO_CODE[ht.abbreviation] || ht.abbreviation?.toLowerCase() || ht.fileCode}.png`;
 
     const box = liveData?.boxscore;
     const plays = liveData?.plays;
