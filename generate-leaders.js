@@ -2,6 +2,8 @@
 // generate-leaders.js — Fetches MLB stat leaders, outputs leaders.html
 
 const API = 'https://statsapi.mlb.com';
+const ESPN_LOGO_CODE = { AZ: 'ari' };
+const MAX_ROWS = 10;
 
 async function fetchJSON(url) {
   const r = await fetch(url);
@@ -11,55 +13,62 @@ async function fetchJSON(url) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-const CATEGORIES = [
-  { key: 'battingAverage', label: 'Batting Average', group: 'Hitting' },
-  { key: 'onBasePct', label: 'On-Base Pct', group: 'Hitting' },
-  { key: 'sluggingPct', label: 'Slugging', group: 'Hitting' },
-  { key: 'onBasePlusSlugging', label: 'OPS', group: 'Hitting' },
-  { key: 'hits', label: 'Hits', group: 'Hitting' },
-  { key: 'wins', label: 'Wins', group: 'Pitching' },
-  { key: 'saves', label: 'Saves', group: 'Pitching' },
-  { key: 'inningsPitched', label: 'Innings Pitched', group: 'Pitching' },
-  { key: 'strikeouts', label: 'Strikeouts', group: 'Pitching' },
-  { key: 'strikeoutsPer9Inn', label: 'K/9', group: 'Pitching' },
-  { key: 'walksPer9Inn', label: 'BB/9', group: 'Pitching' },
-  { key: 'homeRunsAllowed', label: 'HR Allowed', group: 'Pitching' },
+const HITTING_CATS = [
+  { key: 'battingAverage', label: 'Batting Average' },
+  { key: 'homeRuns', label: 'Home Runs' },
+  { key: 'runsBattedIn', label: 'RBI' },
+  { key: 'hits', label: 'Hits' },
+  { key: 'stolenBases', label: 'Stolen Bases' },
+  { key: 'onBasePercentage', label: 'On-Base Pct' },
+  { key: 'sluggingPercentage', label: 'Slugging' },
+  { key: 'onBasePlusSlugging', label: 'OPS' },
 ];
 
-// Lower is better for these
-const LOWER_BETTER = new Set(['walksPer9Inn', 'homeRunsAllowed']);
+const PITCHING_CATS = [
+  { key: 'earnedRunAverage', label: 'ERA', lower: true },
+  { key: 'wins', label: 'Wins' },
+  { key: 'strikeouts', label: 'Strikeouts' },
+  { key: 'saves', label: 'Saves' },
+  { key: 'walksAndHitsPerInningPitched', label: 'WHIP', lower: true },
+  { key: 'strikeoutsPer9Inn', label: 'K/9' },
+  { key: 'inningsPitched', label: 'Innings Pitched' },
+];
+
+async function fetchLeaders(categories, statGroup) {
+  const keys = categories.map(c => c.key).join(',');
+  const data = await fetchJSON(`${API}/api/v1/stats/leaders?leaderCategories=${keys}&season=${new Date().getFullYear()}&limit=10&sportId=1&statGroup=${statGroup}&hydrate=team`);
+  const map = {};
+  for (const cat of data.leagueLeaders || []) {
+    if (cat.statGroup === statGroup) map[cat.leaderCategory] = cat.leaders || [];
+  }
+  return map;
+}
+
+function renderCard(cat, leaders) {
+  const note = cat.lower ? ' <span class="note">(lower is better)</span>' : '';
+  let rows = '';
+  for (const l of leaders.slice(0, MAX_ROWS)) {
+    const name = l.person?.fullName || '?';
+    const abbr = l.team?.abbreviation || '';
+    const logo = `https://a.espncdn.com/i/teamlogos/mlb/500/${ESPN_LOGO_CODE[abbr] || abbr.toLowerCase() || '?'}.png`;
+    rows += `<tr><td class="rank">${l.rank}</td><td class="player"><img src="${logo}" alt="${esc(abbr)}" class="logo"/>${esc(name)}</td><td class="team-abbr">${esc(abbr)}</td><td class="val">${l.value}</td></tr>`;
+  }
+  return `<div class="leader-card">
+      <h3>${esc(cat.label)}${note}</h3>
+      <table><tbody>${rows || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:12px">No data available</td></tr>'}</tbody></table>
+    </div>`;
+}
 
 async function main() {
-  const now = new Date();
-  const season = now.getFullYear();
-  const catKeys = CATEGORIES.map(c => c.key).join(',');
-  const data = await fetchJSON(`${API}/api/v1/stats/leaders?leaderCategories=${catKeys}&season=${season}&limit=10&sportId=1`);
+  const [hittingMap, pitchingMap] = await Promise.all([
+    fetchLeaders(HITTING_CATS, 'hitting'),
+    fetchLeaders(PITCHING_CATS, 'pitching'),
+  ]);
 
-  const leaderMap = {};
-  for (const cat of data.leagueLeaders || []) {
-    leaderMap[cat.leaderCategory] = cat.leaders || [];
-  }
+  const hitting = HITTING_CATS.map(c => renderCard(c, hittingMap[c.key] || [])).join('');
+  const pitching = PITCHING_CATS.map(c => renderCard(c, pitchingMap[c.key] || [])).join('');
 
-  let hitting = '', pitching = '';
-  for (const cat of CATEGORIES) {
-    const leaders = leaderMap[cat.key] || [];
-    let rows = '';
-    for (const l of leaders) {
-      const name = l.person?.fullName || '?';
-      const team = l.team?.abbreviation || '?';
-      const logo = `https://a.espncdn.com/i/teamlogos/mlb/500/${(l.team?.fileCode || team || '').toLowerCase()}.png`;
-      rows += `<tr><td class="rank">${l.rank}</td><td class="player"><img src="${logo}" alt="${esc(team)}" class="logo"/>${esc(name)}</td><td class="val">${l.value}</td></tr>`;
-    }
-    const note = LOWER_BETTER.has(cat.key) ? ' <span class="note">(lower is better)</span>' : '';
-    const section = `<div class="leader-card">
-      <h3>${esc(cat.label)}${note}</h3>
-      <table><tbody>${rows}</tbody></table>
-    </div>`;
-    if (cat.group === 'Hitting') hitting += section;
-    else pitching += section;
-  }
-
-  const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -90,6 +99,7 @@ tr:last-child{border-bottom:0}
 td{padding:6px 4px}
 .rank{width:28px;color:var(--muted);font-weight:700;text-align:center}
 .player{white-space:nowrap}
+.team-abbr{color:var(--muted);font-size:.8rem;text-align:center}
 .logo{width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:6px}
 .val{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
 @media(min-width:760px){.leaders-grid{grid-template-columns:1fr 1fr}}
@@ -118,4 +128,10 @@ td{padding:6px 4px}
   console.log('Done — wrote leaders.html');
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+const _isTest = process.env.NODE_ENV === 'test';
+
+if (!_isTest) main().catch(e => { console.error(e); process.exit(1); });
+
+if (typeof module !== 'undefined') {
+  module.exports = { renderCard, esc, HITTING_CATS, PITCHING_CATS, ESPN_LOGO_CODE, MAX_ROWS };
+}

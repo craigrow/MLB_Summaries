@@ -111,4 +111,10 @@ th{font-weight:700;color:var(--muted);font-size:.78rem}
   console.log('Done — wrote standings.html');
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+const _isTest = process.env.NODE_ENV === 'test';
+
+if (!_isTest) main().catch(e => { console.error(e); process.exit(1); });
+
+if (typeof module !== 'undefined') {
+  module.exports = { shortDiv, esc, DIV_ORDER };
+}
