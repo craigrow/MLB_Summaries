@@ -162,15 +162,23 @@ function buildGameContext(game, standings, series, attendance) {
     }
     const an = game.teams.away.team.teamName, hn = game.teams.home.team.teamName;
     let seriesLine = `Game ${gameNum} of ${seriesLen}: `;
-    if (awayWins === homeWins) seriesLine += `Series tied ${awayWins}-${homeWins}`;
-    else if (awayWins > homeWins) seriesLine += `${an} lead series ${awayWins}-${homeWins}`;
-    else seriesLine += `${hn} lead series ${homeWins}-${awayWins}`;
+    if (awayWins === homeWins) seriesLine += `Series tied ${awayWins}-${homeWins} entering this game`;
+    else if (awayWins > homeWins) seriesLine += `${an} lead series ${awayWins}-${homeWins} entering this game`;
+    else seriesLine += `${hn} lead series ${homeWins}-${awayWins} entering this game`;
     if (gameNum === seriesLen) {
       if (awayWins === homeWins) seriesLine += ' (rubber match)';
       else if (awayWins === 0 || homeWins === 0) seriesLine += ' (sweep attempt)';
       else seriesLine += ' (series finale)';
     }
     lines.push(seriesLine);
+
+    // Post-game series record (tells LLM the correct number to cite)
+    const winner = game.teams.home.score > game.teams.away.score ? 'home' : 'away';
+    const postAway = awayWins + (winner === 'away' ? 1 : 0);
+    const postHome = homeWins + (winner === 'home' ? 1 : 0);
+    if (postAway > postHome) lines.push(`After this game: ${an} lead series ${postAway}-${postHome}`);
+    else if (postHome > postAway) lines.push(`After this game: ${hn} lead series ${postHome}-${postAway}`);
+    else lines.push(`After this game: Series tied ${postAway}-${postHome}`);
   }
 
   // Attendance

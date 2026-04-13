@@ -245,8 +245,11 @@ describe('buildGameContext', () => {
       { awayId: 1, homeId: 2, awayWon: true, homeWon: false },
       { awayId: 1, homeId: 2, awayWon: false, homeWon: true },
     ]};
-    const ctx = buildGameContext(makeGame('NYY', 'BOS'), {}, series, { attendance: null, capacity: null });
+    const game = makeGame('NYY', 'BOS');
+    game.teams.away.score = 5; game.teams.home.score = 3;
+    const ctx = buildGameContext(game, {}, series, { attendance: null, capacity: null });
     assert.ok(ctx.includes('rubber match'));
+    assert.ok(ctx.includes('entering this game'));
   });
 
   it('includes sweep attempt', () => {
@@ -255,8 +258,20 @@ describe('buildGameContext', () => {
       { awayId: 1, homeId: 2, awayWon: true, homeWon: false },
     ]};
     const game = makeGame('NYY', 'BOS');
+    game.teams.away.score = 4; game.teams.home.score = 2;
     const ctx = buildGameContext(game, {}, series, { attendance: null, capacity: null });
     assert.ok(ctx.includes('sweep attempt'));
+  });
+
+  it('includes post-game series record', () => {
+    const series = { gameNum: 3, seriesLen: 4, priorResults: [
+      { awayId: 1, homeId: 2, awayWon: false, homeWon: true },
+      { awayId: 1, homeId: 2, awayWon: false, homeWon: true },
+    ]};
+    const game = makeGame('NYY', 'BOS');
+    game.teams.away.score = 1; game.teams.home.score = 6;
+    const ctx = buildGameContext(game, {}, series, { attendance: null, capacity: null });
+    assert.ok(ctx.includes('After this game: BOS lead series 3-0'), `Got: ${ctx}`);
   });
 
   it('includes near-sellout attendance', () => {
