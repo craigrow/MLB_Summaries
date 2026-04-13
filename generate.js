@@ -193,7 +193,7 @@ function shortDiv(d) {
 }
 
 // --- LLM Summary ---
-async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters, gameContext) {
+async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters, keyPitchers, gameContext) {
   const plays = scoringPlays.map(i => allPlays[i]).filter(Boolean);
   const playDescs = plays.map(p => {
     const a = p.about;
@@ -212,6 +212,10 @@ async function generateSummary(scoringPlays, allPlays, decisions, awayName, home
     return s;
   }).join('\n');
 
+  const pitcherLines = keyPitchers.map(p => {
+    return `${p.name}: ${p.ip} IP, ${p.h} H, ${p.r} R, ${p.k} K, ${p.bb} BB`;
+  }).join('\n');
+
   const userMsg = `Game: ${awayName} at ${homeName}, ${awayR}-${homeR}
 Venue: ${homeName} home game
 Winning pitcher: ${w}
@@ -220,6 +224,9 @@ ${gameContext ? '\nContext:\n' + gameContext : ''}
 
 Scoring plays:
 ${playDescs}
+
+Key pitchers:
+${pitcherLines}
 
 Key hitters:
 ${hitterLines}`;
@@ -254,7 +261,8 @@ Content rules:
 - The final score can appear in the lede when it tells the story (blowouts, upsets), but don't lead with JUST the score.
 - Do NOT narrate inning-by-inning.
 - Do NOT repeat information that's in the box score footer (W/L/key hitters line).
-- All facts must come from the provided data. Invent nothing.` },
+- All facts must come from the provided data. Invent nothing.
+- When mentioning innings pitched, strikeouts, hits allowed, or walks, use the EXACT numbers from the Key pitchers data. Never estimate or round.` },
       { role: 'user', content: `Game: Cubs 10, Nationals 2
 Winning pitcher: Cade Horton
 Losing pitcher: Trevor Williams
@@ -276,6 +284,10 @@ Top 8: Crow-Armstrong singles, scoring Hoerner (8-1)
 Top 9: Amaya doubles, scoring Shaw (9-1)
 Top 9: Suzuki singles, scoring Amaya (10-1)
 Bottom 9: Abrams singles, scoring Ruiz (10-2)
+
+Key pitchers:
+Cade Horton: 6.2 IP, 4 H, 1 R, 8 K, 1 BB
+Trevor Williams: 5.0 IP, 8 H, 6 R, 3 K, 2 BB
 
 Key hitters:
 Ian Happ: 2-for-5, 1 HR, 3 RBI
@@ -401,6 +413,26 @@ function getKeyHitters(boxAway, boxHome) {
   });
   hitters.sort((a, b) => b.val - a.val);
   return hitters.slice(0, 3);
+}
+
+function getKeyPitchers(boxAway, boxHome) {
+  const pitchers = [];
+  [boxAway, boxHome].forEach(side => {
+    const ids = side.pitchers || [];
+    ids.forEach((id, i) => {
+      const p = (side.players || {})['ID'+id];
+      if (!p) return;
+      const s = p.stats?.pitching;
+      if (!s) return;
+      const ip = parseFloat(s.inningsPitched || '0');
+      // Include starters (first pitcher) and anyone with 3+ IP
+      if (i === 0 || ip >= 3) pitchers.push({
+        name: p.person.fullName, ip: s.inningsPitched || '0',
+        h: s.hits||0, r: s.runs||0, er: s.earnedRuns||0, k: s.strikeOuts||0, bb: s.baseOnBalls||0
+      });
+    });
+  });
+  return pitchers;
 }
 
 // --- Box score HTML ---
@@ -551,8 +583,9 @@ async function main() {
     let summaryHtml = '';
     if (plays) {
       const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home) : [];
+      const keyPitchers = box ? getKeyPitchers(box.teams.away, box.teams.home) : [];
       const liveNote = isLive ? `\n\nNOTE: This game is IN PROGRESS (${inningHalf} ${inning}). Write in present tense. Keep to one paragraph. Note the game is ongoing.` : '';
-      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, gameContext + liveNote);
+      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, keyPitchers, gameContext + liveNote);
       if (summary) {
         summaryHtml = summary.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
       }
@@ -674,7 +707,7 @@ if (!_isTest) main().catch(e => { console.error(e); process.exit(1); });
 if (typeof module !== 'undefined') {
   module.exports = {
     yesterday, fmtDate, formatIP, sortKey, ordinal, shortDiv, esc,
-    getKeyHitters, buildMeta, buildGameContext, renderBoxScore,
+    getKeyHitters, getKeyPitchers, buildMeta, buildGameContext, renderBoxScore,
     getExistingGamePks, mergeCards, getAttendance,
     SORT_ORDER, VENUE_CAPACITY
   };

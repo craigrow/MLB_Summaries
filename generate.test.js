@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 process.env.NODE_ENV = 'test';
 const {
   yesterday, fmtDate, formatIP, sortKey, ordinal, shortDiv, esc,
-  getKeyHitters, buildMeta, buildGameContext, renderBoxScore,
+  getKeyHitters, getKeyPitchers, buildMeta, buildGameContext, renderBoxScore,
   getExistingGamePks, mergeCards, getAttendance,
   SORT_ORDER, VENUE_CAPACITY
 } = require('./generate.js');
@@ -136,6 +136,42 @@ describe('getKeyHitters', () => {
 });
 
 // ── Build Meta ───────────────────────────────────────────
+
+describe('getKeyPitchers', () => {
+  it('includes the starting pitcher (first in pitchers array)', () => {
+    const box = {
+      pitchers: [10],
+      players: { ID10: { person: { fullName: 'Logan Gilbert' }, stats: { pitching: { inningsPitched: '7.0', hits: 4, runs: 1, earnedRuns: 1, strikeOuts: 9, baseOnBalls: 1 } } } }
+    };
+    const result = getKeyPitchers(box, { pitchers: [], players: {} });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].name, 'Logan Gilbert');
+    assert.equal(result[0].ip, '7.0');
+    assert.equal(result[0].k, 9);
+  });
+
+  it('includes relievers with 3+ IP', () => {
+    const box = {
+      pitchers: [1, 2, 3],
+      players: {
+        ID1: { person: { fullName: 'Starter' }, stats: { pitching: { inningsPitched: '5.0', hits: 3, runs: 2, earnedRuns: 2, strikeOuts: 4, baseOnBalls: 1 } } },
+        ID2: { person: { fullName: 'Long Relief' }, stats: { pitching: { inningsPitched: '3.0', hits: 1, runs: 0, earnedRuns: 0, strikeOuts: 3, baseOnBalls: 0 } } },
+        ID3: { person: { fullName: 'Closer' }, stats: { pitching: { inningsPitched: '1.0', hits: 0, runs: 0, earnedRuns: 0, strikeOuts: 2, baseOnBalls: 0 } } },
+      }
+    };
+    const result = getKeyPitchers(box, { pitchers: [], players: {} });
+    assert.equal(result.length, 2); // Starter + Long Relief, not Closer
+    assert.equal(result[0].name, 'Starter');
+    assert.equal(result[1].name, 'Long Relief');
+  });
+
+  it('includes starters from both teams', () => {
+    const away = { pitchers: [1], players: { ID1: { person: { fullName: 'Away Starter' }, stats: { pitching: { inningsPitched: '6.0', hits: 5, runs: 3, earnedRuns: 3, strikeOuts: 5, baseOnBalls: 2 } } } } };
+    const home = { pitchers: [2], players: { ID2: { person: { fullName: 'Home Starter' }, stats: { pitching: { inningsPitched: '7.0', hits: 3, runs: 1, earnedRuns: 1, strikeOuts: 8, baseOnBalls: 0 } } } } };
+    const result = getKeyPitchers(away, home);
+    assert.equal(result.length, 2);
+  });
+});
 
 describe('buildMeta', () => {
   it('includes W/L/S decisions', () => {
