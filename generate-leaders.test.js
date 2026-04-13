@@ -4,7 +4,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.NODE_ENV = 'test';
-const { renderCard, esc, HITTING_CATS, PITCHING_CATS, ESPN_LOGO_CODE, MAX_ROWS } = require('./generate-leaders.js');
+const { renderCard, esc, HITTING_CATS, PITCHING_CATS, STARTER_CATS, ESPN_LOGO_CODE, MAX_ROWS, MIN_GS, MIN_IP } = require('./generate-leaders.js');
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -41,6 +41,25 @@ describe('category definitions', () => {
     for (const c of HITTING_CATS) {
       assert.ok(!c.lower, `${c.key} should not be lower-is-better`);
     }
+  });
+});
+
+describe('starter categories', () => {
+  it('has ERA, WHIP, and K/9', () => {
+    const stats = STARTER_CATS.map(c => c.stat);
+    assert.ok(stats.includes('earnedRunAverage'));
+    assert.ok(stats.includes('walksAndHitsPerInningPitched'));
+    assert.ok(stats.includes('strikeoutsPer9Inn'));
+  });
+
+  it('ERA and WHIP are lower-is-better', () => {
+    assert.ok(STARTER_CATS.find(c => c.stat === 'earnedRunAverage').lower);
+    assert.ok(STARTER_CATS.find(c => c.stat === 'walksAndHitsPerInningPitched').lower);
+  });
+
+  it('has reasonable IP and GS minimums', () => {
+    assert.ok(MIN_GS >= 2);
+    assert.ok(MIN_IP >= 10);
   });
 });
 
