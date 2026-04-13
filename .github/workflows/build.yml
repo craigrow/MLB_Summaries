@@ -1,7 +1,7 @@
 name: Generate MLB Digest
 on:
   schedule:
-    - cron: '0 14 * * *'  # 7 AM PT (UTC-7)
+    - cron: '30 5 * * *'  # 10:30 PM PT (UTC-7)
     - cron: '0 8 * * *'   # 1 AM PT (UTC-7)
   workflow_dispatch: {}    # manual trigger
 
@@ -22,6 +22,7 @@ jobs:
       - run: node generate.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          INCREMENTAL: ${{ github.event.schedule == '0 8 * * *' && 'true' || '' }}
       - run: node generate-standings.js
       - run: node generate-leaders.js
       - run: |

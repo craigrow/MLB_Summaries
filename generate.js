@@ -2,7 +2,8 @@
 // generate.js — Fetches yesterday's MLB games, generates LLM summaries, outputs index.html
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_KEY) { console.error('OPENAI_API_KEY not set'); process.exit(1); }
+const _isTest = process.env.NODE_ENV === 'test';
+if (!OPENAI_KEY && !_isTest) { console.error('OPENAI_API_KEY not set'); process.exit(1); }
 
 const API = 'https://statsapi.mlb.com';
 const SORT_ORDER = {SEA:0,HOU:1,LAA:2,TEX:3,ATH:4,OAK:4,
@@ -444,23 +445,68 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 // --- Main ---
 const ESPN_LOGO_CODE = { AZ: 'ari' };
 
+function getExistingGamePks() {
+  if (!process.env.INCREMENTAL) return new Set();
+  const fs = require('fs');
+  try {
+    const html = fs.readFileSync('index.html', 'utf8');
+    const pks = new Set();
+    // Only skip games that are Final (not data-live cards)
+    const cardRegex = /<article class="game-card"(.*?)>[\s\S]*?id="box-(\d+)"[\s\S]*?<\/article>/g;
+    for (const m of html.matchAll(cardRegex)) {
+      if (!m[1].includes('data-live')) pks.add(Number(m[2]));
+    }
+    if (pks.size) console.log(`Incremental mode: ${pks.size} final games already summarized`);
+    return pks;
+  } catch { return new Set(); }
+}
+
+function mergeCards(existingHtml, newCards) {
+  const cardRegex = /<article class="game-card"[\s\S]*?<\/article>/g;
+  const existingCards = existingHtml.match(cardRegex) || [];
+  // Get gamePks from new cards to replace any live versions
+  const newPks = new Set();
+  for (const c of newCards) {
+    const m = c.match(/id="box-(\d+)"/);
+    if (m) newPks.add(m[1]);
+  }
+  // Keep existing cards that aren't being replaced
+  const kept = existingCards.filter(c => {
+    const m = c.match(/id="box-(\d+)"/);
+    return !m || !newPks.has(m[1]);
+  });
+  return [...kept, ...newCards];
+}
+
 async function main() {
   const date = yesterday();
-  console.log(`Generating digest for ${date}`);
+  const incremental = !!process.env.INCREMENTAL;
+  const existingPks = getExistingGamePks();
+  console.log(`Generating ${incremental ? 'incremental ' : ''}digest for ${date}`);
 
   const sched = await fetchJSON(`${API}/api/v1/schedule?date=${date}&sportId=1&hydrate=team,linescore,decisions`);
   const games = (sched.dates || [])[0]?.games || [];
-  const final = games.filter(g => g.status?.abstractGameState === 'Final');
-  console.log(`${final.length} completed games`);
+  const final = games.filter(g => {
+    const s = g.status?.abstractGameState;
+    return s === 'Final' || s === 'Live';
+  });
+  console.log(`${final.length} completed/in-progress games`);
 
   final.sort((a, b) => sortKey(a) - sortKey(b) || new Date(a.gameDate) - new Date(b.gameDate));
+
+  const newGames = incremental ? final.filter(g => !existingPks.has(g.gamePk)) : final;
+  if (incremental && newGames.length === 0) {
+    console.log('No new completed games — skipping');
+    return;
+  }
+  if (incremental) console.log(`${newGames.length} new game(s) to summarize`);
 
   // Fetch standings once for all games
   const standings = await fetchStandings(date);
   console.log(`  Standings loaded for ${Object.keys(standings).length} teams`);
 
   const cards = [];
-  for (const game of final) {
+  for (const game of newGames) {
     const away = game.teams.away;
     const home = game.teams.home;
     const at = away.team;
@@ -490,6 +536,10 @@ async function main() {
     const box = liveData?.boxscore;
     const plays = liveData?.plays;
     const decisions = liveData?.decisions || {};
+    const isLive = game.status?.abstractGameState === 'Live';
+    const inningHalf = ls.inningHalf || '';
+    const inning = ls.currentInning || '';
+    const statusText = isLive ? `In Progress — ${inningHalf} ${inning}${ordinal(inning).replace(inning,'')}` : 'Final';
 
     // Fetch enrichment context
     const series = await fetchSeriesContext(game, date);
@@ -501,7 +551,8 @@ async function main() {
     let summaryHtml = '';
     if (plays) {
       const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home) : [];
-      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, gameContext);
+      const liveNote = isLive ? `\n\nNOTE: This game is IN PROGRESS (${inningHalf} ${inning}). Write in present tense. Keep to one paragraph. Note the game is ongoing.` : '';
+      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, gameContext + liveNote);
       if (summary) {
         summaryHtml = summary.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
       }
@@ -513,9 +564,9 @@ async function main() {
     const boxHtml = box ? renderBoxScore(box.teams.away, box.teams.home, at.teamName, ht.teamName) : '';
     const boxId = 'box-' + game.gamePk;
 
-    cards.push(`<article class="game-card">
+    cards.push(`<article class="game-card"${isLive ? ' data-live="true"' : ''}>
   <div class="scoreboard">
-    <div class="sb-top">Final</div>
+    <div class="sb-top${isLive ? ' live' : ''}">${statusText}</div>
     <div class="sb-head"><div></div><div>R</div><div>H</div><div>E</div></div>
     <div class="sb-row${aWin ? ' winner' : ''}">
       <div class="team"><img src="${aLogo}" alt="${esc(at.teamName)}" class="team-logo"/><div class="team-name">${esc(at.teamName)}</div></div>
@@ -530,6 +581,16 @@ async function main() {
   ${metaHtml ? `<div class="meta">${esc(metaHtml)}</div>` : ''}
   ${boxHtml ? `<button class="box-toggle" onclick="document.getElementById('${boxId}').classList.toggle('open');this.textContent=this.textContent.includes('▸')?'Box Score ▾':'Box Score ▸'">Box Score ▸</button><div class="box-content" id="${boxId}">${boxHtml}</div>` : ''}
 </article>`);
+  }
+
+  // In incremental mode, merge new cards into existing HTML
+  let allCards = cards;
+  if (incremental && existingPks.size > 0) {
+    const fs = require('fs');
+    try {
+      const existing = fs.readFileSync('index.html', 'utf8');
+      allCards = mergeCards(existing, cards);
+    } catch {}
   }
 
   const html = `<!DOCTYPE html>
@@ -553,6 +614,7 @@ nav a.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
 .game-card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .scoreboard{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
 .sb-top{background:#f8fafc;color:var(--muted);font-weight:800;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;padding:8px 14px;border-bottom:1px solid #e5e7eb}
+.sb-top.live{background:#fef2f2;color:#dc2626}
 .sb-head,.sb-row{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px 44px;align-items:center}
 .sb-head{color:var(--muted);font-size:.78rem;font-weight:800;padding:6px 14px;border-bottom:1px solid #e5e7eb}
 .sb-head>div{text-align:center}.sb-head>div:first-child{text-align:left}
@@ -595,7 +657,7 @@ nav a.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
     <a href="leaders.html">Leaders</a>
   </nav>
   <section class="grid">
-    ${cards.length ? cards.join('\n') : '<div class="no-games">No completed games for this date.</div>'}
+    ${allCards.length ? allCards.join('\n') : '<div class="no-games">No completed games for this date.</div>'}
   </section>
 </main>
 </body>
@@ -603,7 +665,17 @@ nav a.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
 
   const fs = require('fs');
   fs.writeFileSync('index.html', html);
-  console.log(`Done — wrote index.html with ${cards.length} games`);
+  console.log(`Done — wrote index.html with ${allCards.length} games${incremental ? ` (${cards.length} new)` : ''}`);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+if (!_isTest) main().catch(e => { console.error(e); process.exit(1); });
+
+// Export for testing
+if (typeof module !== 'undefined') {
+  module.exports = {
+    yesterday, fmtDate, formatIP, sortKey, ordinal, shortDiv, esc,
+    getKeyHitters, buildMeta, buildGameContext, renderBoxScore,
+    getExistingGamePks, mergeCards, getAttendance,
+    SORT_ORDER, VENUE_CAPACITY
+  };
+}

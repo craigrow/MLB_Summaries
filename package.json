@@ -1,0 +1,7 @@
+{
+  "name": "mlb-summaries",
+  "private": true,
+  "scripts": {
+    "test": "NODE_ENV=test node --test generate.test.js"
+  }
+}
