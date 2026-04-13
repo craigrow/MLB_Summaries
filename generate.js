@@ -365,7 +365,7 @@ Alcantara struck out five, allowed four hits and walked two in a promising start
       const text = data.choices?.[0]?.message?.content?.trim() || null;
       if (text) console.log(`    Summary generated (${text.length} chars)`);
       else console.error('    OpenAI returned empty response');
-      return text;
+      return { text, userMsg };
     }
     const err = await r.text();
     if (r.status === 429) {
@@ -379,6 +379,40 @@ Alcantara struck out five, allowed four hits and walked two in a promising start
   }
   console.error('    Failed after 3 retries');
   return null;
+}
+
+async function verifySummary(draft, userMsg) {
+  const body = {
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: `You are a fact-checker for baseball game recaps. You will receive a draft summary and the source box score data.
+
+Your job:
+1. Check EVERY factual claim in the summary against the provided data: innings pitched, hits, runs, RBIs, home runs, strikeouts, walks, score, player names, win/loss/save assignments.
+2. If ALL facts are correct, return the summary unchanged.
+3. If ANY fact is wrong, return a corrected version that fixes ONLY the incorrect facts. Do not change the writing style, tone, or structure.
+
+Return ONLY the corrected (or unchanged) summary text. No commentary, no explanation.` },
+      { role: 'user', content: `SOURCE DATA:\n${userMsg}\n\nDRAFT SUMMARY:\n${draft}` }
+    ],
+    temperature: 0,
+    max_tokens: 400
+  };
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify(body)
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text && text !== draft) console.log('    Verification corrected summary');
+      return text || draft;
+    }
+  } catch (e) { console.error(`    Verification failed: ${e.message}`); }
+  return draft; // fall back to unverified draft
 }
 
 // --- Build meta line ---
@@ -585,9 +619,10 @@ async function main() {
       const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home) : [];
       const keyPitchers = box ? getKeyPitchers(box.teams.away, box.teams.home) : [];
       const liveNote = isLive ? `\n\nNOTE: This game is IN PROGRESS (${inningHalf} ${inning}). Write in present tense. Keep to one paragraph. Note the game is ongoing.` : '';
-      const summary = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, keyPitchers, gameContext + liveNote);
-      if (summary) {
-        summaryHtml = summary.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
+      const result = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, keyPitchers, gameContext + liveNote);
+      if (result?.text) {
+        const verified = await verifySummary(result.text, result.userMsg);
+        summaryHtml = verified.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
       }
       // Pace requests to stay under rate limit
       await new Promise(res => setTimeout(res, 22000));
