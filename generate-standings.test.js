@@ -4,7 +4,13 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.NODE_ENV = 'test';
-const { shortDiv, esc, DIV_ORDER } = require('./generate-standings.js');
+const { shortDiv, esc, DIV_ORDER, ESPN_LOGO_CODE } = require('./generate-standings.js');
+
+describe('ESPN_LOGO_CODE', () => {
+  it('maps ana (Angels fileCode) to laa', () => {
+    assert.equal(ESPN_LOGO_CODE['ana'], 'laa');
+  });
+});
 
 describe('shortDiv', () => {
   it('shortens American League divisions', () => {

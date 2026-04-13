@@ -17,6 +17,8 @@ const DIV_ORDER = [
   'National League West', 'National League East', 'National League Central'
 ];
 
+const ESPN_LOGO_CODE = { ana: 'laa', ari: 'ari' };
+
 function shortDiv(name) {
   return name.replace('American League ', 'AL ').replace('National League ', 'NL ');
 }
@@ -32,7 +34,7 @@ async function main() {
     divMap[divName] = rec.teamRecords.map(t => ({
       name: t.team?.teamName || '?',
       abbr: t.team?.abbreviation || '?',
-      logo: `https://a.espncdn.com/i/teamlogos/mlb/500/${(t.team?.fileCode || t.team?.abbreviation || '').toLowerCase()}.png`,
+      logo: `https://a.espncdn.com/i/teamlogos/mlb/500/${ESPN_LOGO_CODE[(t.team?.fileCode || '').toLowerCase()] || (t.team?.fileCode || t.team?.abbreviation || '').toLowerCase()}.png`,
       w: t.wins, l: t.losses,
       pct: t.winningPercentage || '.000',
       gb: t.gamesBack === '-' ? '—' : t.gamesBack,
@@ -116,5 +118,5 @@ const _isTest = process.env.NODE_ENV === 'test';
 if (!_isTest) main().catch(e => { console.error(e); process.exit(1); });
 
 if (typeof module !== 'undefined') {
-  module.exports = { shortDiv, esc, DIV_ORDER };
+  module.exports = { shortDiv, esc, DIV_ORDER, ESPN_LOGO_CODE };
 }
