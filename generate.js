@@ -224,7 +224,7 @@ async function generateSummary(scoringPlays, allPlays, decisions, awayName, home
     return `${p.name}: ${p.ip} IP, ${p.h} H, ${p.r} R, ${p.k} K, ${p.bb} BB`;
   }).join('\n');
 
-  const userMsg = `Game: ${awayName} at ${homeName}, ${awayR}-${homeR}
+  const userMsg = `Game: ${awayName} ${awayR}, ${homeName} ${homeR}
 Venue: ${homeName} home game
 Winning pitcher: ${w}
 Losing pitcher: ${l}${sv ? '\nSave: ' + sv : ''}
