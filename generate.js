@@ -201,7 +201,7 @@ function shortDiv(d) {
 }
 
 // --- LLM Summary ---
-async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters, keyPitchers, gameContext) {
+async function generateSummary(scoringPlays, allPlays, decisions, awayName, homeName, awayR, homeR, keyHitters, keyPitchers, gameContext, dateStr) {
   const plays = scoringPlays.map(i => allPlays[i]).filter(Boolean);
   const playDescs = plays.map(p => {
     const a = p.about;
@@ -214,17 +214,18 @@ async function generateSummary(scoringPlays, allPlays, decisions, awayName, home
   const sv = decisions?.save?.fullName;
 
   const hitterLines = keyHitters.map(h => {
-    let s = `${h.name}: ${h.h}-for-${h.ab}`;
+    let s = `${h.name} (${h.team}): ${h.h}-for-${h.ab}`;
     if (h.hr) s += `, ${h.hr} HR`;
     if (h.rbi) s += `, ${h.rbi} RBI`;
     return s;
   }).join('\n');
 
   const pitcherLines = keyPitchers.map(p => {
-    return `${p.name}: ${p.ip} IP, ${p.h} H, ${p.r} R, ${p.k} K, ${p.bb} BB`;
+    return `${p.name} (${p.team}): ${p.ip} IP, ${p.h} H, ${p.r} R, ${p.k} K, ${p.bb} BB`;
   }).join('\n');
 
   const userMsg = `Game: ${awayName} ${awayR}, ${homeName} ${homeR}
+Date: ${dateStr}
 Venue: ${homeName} home game
 Winning pitcher: ${w}
 Losing pitcher: ${l}${sv ? '\nSave: ' + sv : ''}
@@ -270,8 +271,11 @@ Content rules:
 - Do NOT narrate inning-by-inning.
 - Do NOT repeat information that's in the box score footer (W/L/key hitters line).
 - All facts must come from the provided data. Invent nothing.
+- Use the Date field for the day of the week — never guess or infer the day.
+- Each player's team is shown in parentheses after their name. Always attribute players to the correct team.
 - When mentioning innings pitched, strikeouts, hits allowed, or walks, use the EXACT numbers from the Key pitchers data. Never estimate or round.` },
       { role: 'user', content: `Game: Cubs 10, Nationals 2
+Date: Saturday, March 29, 2026
 Winning pitcher: Cade Horton
 Losing pitcher: Trevor Williams
 
@@ -294,17 +298,18 @@ Top 9: Suzuki singles, scoring Amaya (10-1)
 Bottom 9: Abrams singles, scoring Ruiz (10-2)
 
 Key pitchers:
-Cade Horton: 6.2 IP, 4 H, 1 R, 8 K, 1 BB
-Trevor Williams: 5.0 IP, 8 H, 6 R, 3 K, 2 BB
+Cade Horton (Cubs): 6.2 IP, 4 H, 1 R, 8 K, 1 BB
+Trevor Williams (Nationals): 5.0 IP, 8 H, 6 R, 3 K, 2 BB
 
 Key hitters:
-Ian Happ: 2-for-5, 1 HR, 3 RBI
-Miguel Amaya: 2-for-5, 1 HR, 2 RBI
-Pete Crow-Armstrong: 2-for-5, 1 RBI` },
+Ian Happ (Cubs): 2-for-5, 1 HR, 3 RBI
+Miguel Amaya (Cubs): 2-for-5, 1 HR, 2 RBI
+Pete Crow-Armstrong (Cubs): 2-for-5, 1 RBI` },
       { role: 'assistant', content: `Cade Horton threw four-hit ball into the seventh inning, Ian Happ broke the game open with a three-run homer in the sixth and the Cubs routed the Nationals 10-2 on Saturday.
 
 Miguel Amaya homered and finished with two hits and two RBIs, and Pete Crow-Armstrong added two hits. Nico Hoerner, Matt Shaw and Carson Kelly drove in runs as the Cubs avenged Thursday's 10-4 opening day loss.` },
       { role: 'user', content: `Game: Cardinals 6, Rays 5 (10 innings)
+Date: Saturday, March 29, 2026
 Winning pitcher: JoJo Romero
 Losing pitcher: Griffin Jax
 
@@ -326,13 +331,14 @@ Bottom 9: Arenado sacrifice fly, scoring Contreras (5-5)
 Bottom 10: Wetherholt singles to right, scoring Church and Walker (6-5)
 
 Key hitters:
-JJ Wetherholt: 1-for-3, 2 RBI
-Nolan Arenado: 1-for-4, 2 RBI
-Junior Caminero: 1-for-4, 1 HR, 3 RBI` },
+JJ Wetherholt (Cardinals): 1-for-3, 2 RBI
+Nolan Arenado (Cardinals): 1-for-4, 2 RBI
+Junior Caminero (Rays): 1-for-4, 1 HR, 3 RBI` },
       { role: 'assistant', content: `St. Louis rookie JJ Wetherholt lined a two-run, 10th-inning single after Michael McGreevy tossed six hitless innings to help the Cardinals beat the Rays 6-5 on Saturday.
 
 Wetherholt, the seventh pick of the 2024 MLB amateur draft, singled to right off Griffin Jax in his second career game after Jax walked Jordan Walker on four pitches to open the 10th and Victor Scott II bunted the runners into scoring position.` },
       { role: 'user', content: `Game: Marlins 2, Rockies 1
+Date: Friday, March 28, 2026
 Winning pitcher: Sandy Alcantara
 Losing pitcher: Kyle Freeland
 Save: Tanner Scott
@@ -350,9 +356,9 @@ Top 5: Toglia homers to right (1-1)
 Bottom 7: Burger singles, scoring Sanoja (2-1)
 
 Key hitters:
-Javier Sanoja: 3-for-4, 1 RBI
-Sandy Alcantara: 7 IP, 4 H, 1 R, 5 K
-Jake Burger: 1-for-3, 1 RBI` },
+Javier Sanoja (Marlins): 3-for-4, 1 RBI
+Sandy Alcantara (Marlins): 7 IP, 4 H, 1 R, 5 K
+Jake Burger (Marlins): 1-for-3, 1 RBI` },
       { role: 'assistant', content: `Javier Sanoja had three hits, Sandy Alcantara allowed one run over seven innings and the Marlins beat the Rockies 2-1 on Friday night.
 
 Alcantara struck out five, allowed four hits and walked two in a promising start for the 2022 NL Cy Young award winner after a rollercoaster 2025 during which he went 11-13 with a 5.36 ERA while facing trade rumors. Jake Burger drove in the go-ahead run with a seventh-inning single, giving Alcantara and the bullpen enough to work with.` },
@@ -424,13 +430,13 @@ Return ONLY the corrected (or unchanged) summary text. No commentary, no explana
 }
 
 // --- Build meta line ---
-function buildMeta(decisions, boxAway, boxHome) {
+function buildMeta(decisions, boxAway, boxHome, awayName, homeName) {
   const parts = [];
   if (decisions?.winner) parts.push(`W: ${decisions.winner.fullName}`);
   if (decisions?.loser) parts.push(`L: ${decisions.loser.fullName}`);
   if (decisions?.save) parts.push(`S: ${decisions.save.fullName}`);
 
-  const hitters = getKeyHitters(boxAway, boxHome);
+  const hitters = getKeyHitters(boxAway, boxHome, awayName, homeName);
   if (hitters.length) {
     const strs = hitters.map(h => {
       let s = `${h.name} ${h.h}-for-${h.ab}`;
@@ -443,23 +449,23 @@ function buildMeta(decisions, boxAway, boxHome) {
   return parts.join(' • ');
 }
 
-function getKeyHitters(boxAway, boxHome) {
+function getKeyHitters(boxAway, boxHome, awayName, homeName) {
   const hitters = [];
-  [boxAway, boxHome].forEach(side => {
+  [[boxAway, awayName], [boxHome, homeName]].forEach(([side, team]) => {
     Object.values(side.players || {}).forEach(p => {
       const s = p.stats?.batting;
       if (!s || !s.atBats) return;
       const val = (s.hits||0) + (s.rbi||0) + (s.homeRuns||0)*2;
-      if (val >= 2) hitters.push({name:p.person.fullName, ab:s.atBats, h:s.hits||0, hr:s.homeRuns||0, rbi:s.rbi||0, val});
+      if (val >= 2) hitters.push({name:p.person.fullName, team, ab:s.atBats, h:s.hits||0, hr:s.homeRuns||0, rbi:s.rbi||0, val});
     });
   });
   hitters.sort((a, b) => b.val - a.val);
   return hitters.slice(0, 3);
 }
 
-function getKeyPitchers(boxAway, boxHome) {
+function getKeyPitchers(boxAway, boxHome, awayName, homeName) {
   const pitchers = [];
-  [boxAway, boxHome].forEach(side => {
+  [[boxAway, awayName], [boxHome, homeName]].forEach(([side, team]) => {
     const ids = side.pitchers || [];
     ids.forEach((id, i) => {
       const p = (side.players || {})['ID'+id];
@@ -469,7 +475,7 @@ function getKeyPitchers(boxAway, boxHome) {
       const ip = parseFloat(s.inningsPitched || '0');
       // Include starters (first pitcher) and anyone with 3+ IP
       if (i === 0 || ip >= 3) pitchers.push({
-        name: p.person.fullName, ip: s.inningsPitched || '0',
+        name: p.person.fullName, team, ip: s.inningsPitched || '0',
         h: s.hits||0, r: s.runs||0, er: s.earnedRuns||0, k: s.strikeOuts||0, bb: s.baseOnBalls||0
       });
     });
@@ -624,10 +630,10 @@ async function main() {
     // Generate LLM summary
     let summaryHtml = '';
     if (plays) {
-      const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home) : [];
-      const keyPitchers = box ? getKeyPitchers(box.teams.away, box.teams.home) : [];
+      const keyHitters = box ? getKeyHitters(box.teams.away, box.teams.home, at.teamName, ht.teamName) : [];
+      const keyPitchers = box ? getKeyPitchers(box.teams.away, box.teams.home, at.teamName, ht.teamName) : [];
       const liveNote = isLive ? `\n\nNOTE: This game is IN PROGRESS (${inningHalf} ${inning}). Write in present tense. Keep to one paragraph. Note the game is ongoing.` : '';
-      const result = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, keyPitchers, gameContext + liveNote);
+      const result = await generateSummary(plays.scoringPlays || [], plays.allPlays || [], decisions, at.teamName, ht.teamName, aR, hR, keyHitters, keyPitchers, gameContext + liveNote, fmtDate(date));
       if (result?.text) {
         const verified = await verifySummary(result.text, result.userMsg);
         summaryHtml = verified.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
@@ -636,7 +642,7 @@ async function main() {
       await new Promise(res => setTimeout(res, 22000));
     }
 
-    const metaHtml = box ? buildMeta(decisions, box.teams.away, box.teams.home) : '';
+    const metaHtml = box ? buildMeta(decisions, box.teams.away, box.teams.home, at.teamName, ht.teamName) : '';
     const boxHtml = box ? renderBoxScore(box.teams.away, box.teams.home, at.teamName, ht.teamName) : '';
     const boxId = 'box-' + game.gamePk;
 
